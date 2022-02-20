@@ -7,7 +7,43 @@
     <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAAXNSR0IArs4c6QAAAAxQTFRFAAAAAxmR8+/s3i5SinG4LAAAAAR0Uk5TAP///7MtQIgAAABGSURBVBiVlY9BDgAgCMPY/P+fhQlo9GQTknXxMM0CCivYpA+PcQCXu8RVcxeeBav5K6CC6RDsVajCtiB3HJ5TL99vnv8qTuMLAYu9aKwhAAAAAElFTkSuQmCC"/>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P" type="text/css"/>
     <!-- scripts-->
-    <script></script>
+    <script>const wrap = {};
+
+wrap.before = function(object, method, callback) {
+    const original = object[method];
+
+    object[method] = async function (...args) {
+        await callback.call(this, ...args);
+        const result = await original.call(this, ...args);
+        return result;
+    };
+}
+
+wrap.after = function(object, method, callback) {
+    const original = object[method];
+
+    object[method] = async function (...args) {
+        const result = await original.call(this, ...args);
+        await callback.call(this, ...args);
+        return result;
+    };
+}
+
+wrap.replace = function(object, method, callback) {
+    object[method] = async function (...args) {
+        return callback.call(this, ...args);
+    };
+}
+
+wrap.splice = function(object, method, callback) {
+    const original = object[method];
+
+    object[method] = async function (...args) {
+        return callback.call(this, original, ...args);
+    };
+}
+
+    </script>
     <script>"strict"
 const maker = {};
 const ui = {};
@@ -1658,7 +1694,7 @@ function tokeniseScript(script) {
 
     function newLine() {
         flushBuffer();
-        tokens.push(["markup", "el"]);
+        tokens.push(["markup", "br"]);
     }
 
     function flushBuffer() {
@@ -1692,8 +1728,8 @@ function textBufferToCommands(buffer) {
 }
 
 function markupBufferToCommands(buffer) {
-    if (buffer === "ep") return [{ type: "break", target: "page" }];
-    if (buffer === "el") return [{ type: "break", target: "line" }];
+    if (buffer === "pg") return [{ type: "break", target: "page" }];
+    if (buffer === "br") return [{ type: "break", target: "line" }];
     else                 return [{ type: "style", style: buffer }];
 }
 
@@ -1762,6 +1798,7 @@ function commandsToPages(commands, options, styleHandler) {
         const char = getFontChar(options.font, command.char) ?? getFontChar(options.font, "?");
         const position = { x: offset, y: currLine * (options.font.lineHeight + 4) };
         const glyph = { 
+            char: command.char,
             image: char.image,
             position,
             offset: { x: 0, y: 0 },
@@ -2158,6 +2195,11 @@ class DialoguePlayback extends EventTarget {
     return Math.floor(Math.random() * (max - min)) + min;
 }
 
+function getRandomFloat(min, max) {
+    return Math.random() * (max - min) + min;
+}
+
+
     </script>
     <script>// browser saves will be stored under the id "bipsi"
 const storage = new maker.ProjectStorage("bipsi");
@@ -2201,9 +2243,15 @@ const storage = new maker.ProjectStorage("bipsi");
  */
 
 /**
+ * @typedef {Object} BipsiDataPalette
+ * @property {number} id 
+ * @property {string[]} colors
+ */
+
+/**
  * @typedef {Object} BipsiDataProject
  * @property {BipsiDataRoom[]} rooms
- * @property {string[][]} palettes
+ * @property {BipsiDataPalette[]} palettes
  * @property {string} tileset
  * @property {BipsiDataTile[]} tiles
  */
@@ -2240,6 +2288,7 @@ const constants = {
     wallTile: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAAXNSR0IArs4c6QAAAAlQTFRFAAAA////AAAAc8aDcQAAAAN0Uk5TAP//RFDWIQAAADlJREFUGJVlj0EOACAIw2D/f7QmLAa7XeyaKFgVkfSjum1M9xhDeN24+pjdbVYPwSt8lGMDcnV+DjlaUACpjVBfxAAAAABJRU5ErkJggg==",
     eventTile: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAAXNSR0IArs4c6QAAAAlQTFRFAAAA////AAAAc8aDcQAAAAN0Uk5TAP//RFDWIQAAACVJREFUGJVjYMAATCgAJMCIBCACCHmYAFz3AAugOwzd6eieQwMAdfAA3XvBXggAAAAASUVORK5CYII=",
     startTile: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAAXNSR0IArs4c6QAAAAZQTFRFAAAA////pdmf3QAAAAJ0Uk5TAP9bkSK1AAAAJUlEQVQYlWNgwACMKAC7ALJqnALIqkEETD8lAhiGEnIHIb+gAQBFEACBGFbz9wAAAABJRU5ErkJggg==",
+    pluginTile: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAAAXNSR0IArs4c6QAAAFJJREFUKJGVkVEOwCAIQ4vp/a/MPkwUisOtXxBfaQTgIgPg3TvREAaAu1RNG3Ob3QmIUyI8dKxLoABVzK2VCAHqh/9EnNe1gNOqAvB+DnbuT3oAhXsLLn/W2IoAAAAASUVORK5CYII=",
 
     colorwheelMargin: 12,
 }
@@ -2301,7 +2350,7 @@ function makeTileToFrameMap(tiles, frame) {
  * @param {CanvasRenderingContext2D} destination
  * @param {CanvasRenderingContext2D} tileset 
  * @param {Map<number, number>} tileToFrame 
- * @param {string[]} palette 
+ * @param {BipsiDataPalette} palette 
  * @param {{ tilemap: number[][], backmap: number[][], foremap: number[][] }} layer 
  */
 function drawTilemapLayer(destination, tileset, tileToFrame, palette, { tilemap, backmap, foremap }) {
@@ -2317,10 +2366,10 @@ function drawTilemapLayer(destination, tileset, tileToFrame, palette, { tilemap,
 
                 if (tileIndex === 0) continue;
 
-                backg.fillStyle = palette[back];
+                backg.fillStyle = palette.colors[back];
                 backg.fillRect(tx * size, ty * size, size, size);
 
-                color.fillStyle = palette[fore];
+                color.fillStyle = palette.colors[fore];
                 color.fillRect(tx * size, ty * size, size, size);
 
                 tiles.drawImage(
@@ -2337,11 +2386,11 @@ function drawTilemapLayer(destination, tileset, tileToFrame, palette, { tilemap,
  * @param {CanvasRenderingContext2D} destination 
  * @param {CanvasRenderingContext2D} tileset 
  * @param {Map<number, number>} tileToFrame 
- * @param {string[]} palette 
+ * @param {BipsiDataPalette} palette 
  * @param {BipsiDataEvent[]} events 
  */
 function drawEventLayer(destination, tileset, tileToFrame, palette, events) {
-    const [background, foreground, highlight] = palette;
+    const [background, foreground, highlight] = palette.colors;
 
     drawRecolorLayer(destination, (backg, color, tiles) => {
         events.forEach((event) => {
@@ -2371,11 +2420,11 @@ function drawEventLayer(destination, tileset, tileToFrame, palette, events) {
 
 /**
  * @param {CanvasRenderingContext2D} rendering 
- * @param {string[]} palette 
+ * @param {BipsiDataPalette} palette 
  * @param {BipsiDataRoom} room 
  */
  function drawRoomThumbnail(rendering, palette, room) {
-    const [background, foreground, highlight] = palette;
+    const [background, foreground, highlight] = palette.colors;
     for (let y = 0; y < 16; ++y) {
         for (let x = 0; x < 16; ++x) {
             const color = room.wallmap[y][x] === 1 ? foreground : background;
@@ -2390,6 +2439,18 @@ function drawEventLayer(destination, tileset, tileToFrame, palette, events) {
         rendering.fillRect(x, y, 1, 1);
     });
 }
+
+/**
+ * @param {CanvasRenderingContext2D} rendering 
+ * @param {BipsiDataPalette} palette
+ */
+ function drawPaletteThumbnail(rendering, palette) {
+    palette.colors.forEach((color, i) => {
+        rendering.fillStyle = color;
+        rendering.fillRect(i, 0, 1, 1);
+    });
+}
+
 
 /**
  * @param {any[][]} map 
@@ -2442,6 +2503,7 @@ function getById(items, id) {
 /** 
  * @param {BipsiDataProject} data 
  * @param {number} id
+ * @returns {BipsiDataRoom}
  */
 function getRoomById(data, id) {
     return getById(data.rooms, id);
@@ -2450,6 +2512,16 @@ function getRoomById(data, id) {
 /** 
  * @param {BipsiDataProject} data 
  * @param {number} id
+ * @returns {BipsiDataPalette}
+ */
+function getPaletteById(data, id) {
+    return getById(data.palettes, id);
+}
+
+/** 
+ * @param {BipsiDataProject} data 
+ * @param {number} id
+ * @returns {BipsiDataEvent}
  */
 function getEventById(data, id) {
     return getById(allEvents(data), id);
@@ -2458,6 +2530,7 @@ function getEventById(data, id) {
 /** 
  * @param {BipsiDataProject} data 
  * @param {number} id
+ * @returns {BipsiDataTile}
  */
 function getTileById(data, id) {
     return getById(data.tiles, id);
@@ -2495,6 +2568,9 @@ const nextTileId = (data) => nextId(data.tiles);
 /** @param {BipsiDataProject} data */
 const nextEventId = (data) => nextId(data.rooms.flatMap((room) => room.events));
 
+/** @param {BipsiDataProject} data */
+const nextPaletteId = (data) => nextId(data.palettes);
+
 /**
  * @param {CanvasRenderingContext2D} tileset 
  * @param {BipsiDataTile[]} tiles
@@ -2521,6 +2597,22 @@ function resizeTileset(tileset, tiles) {
 
     canvas.style.setProperty("width", `${canvas.width * scale}px`);
     canvas.style.setProperty("height", `${canvas.height * scale}px`);
+}
+
+/**
+ * @param {HTMLElement} element 
+ */
+ function scaleElementToParent(element, margin=0) {
+    const parent = element.parentElement;
+
+    const [tw, th] = [parent.clientWidth-margin*2, parent.clientHeight-margin*2];
+    const [sw, sh] = [tw / element.clientWidth, th / element.clientHeight];
+    let scale = Math.min(sw, sh);
+    if (scale > 1) scale = Math.floor(scale); 
+
+    element.style.setProperty("transform", `translate(-50%, -50%) scale(${scale})`);
+
+    return scale;
 }
 
 // async equivalent of Function constructor
@@ -2692,6 +2784,20 @@ const ERROR_STYLE = {
 
     anchorX: .5, anchorY: .5,
 }
+
+const BEHAVIOUR_BEFORE = `
+let script = $FIELD("before", "javascript");
+if (script) {
+    await RUN_JS(script);
+}
+`;
+
+const BEHAVIOUR_AFTER = `
+let script = $FIELD("after", "javascript");
+if (script) {
+    await RUN_JS(script);
+}
+`;
 
 const BEHAVIOUR_PAGE_COLOR = `
 let color = FIELD(EVENT, "page-color", "text");
@@ -3105,7 +3211,7 @@ class BipsiPlayback extends EventTarget {
         const avatar = getEventById(this.data, this.avatarId);
         const room = roomFromEvent(this.data, avatar);
         const palette = this.getActivePalette();
-        const [background] = palette;
+        const [background] = palette.colors;
         const tileset = this.stateManager.resources.get(this.data.tileset);
 
         // find current animation frame for each tile
@@ -3192,7 +3298,7 @@ class BipsiPlayback extends EventTarget {
     }
 
     async title(script, options={}) {
-        const [background] = this.getActivePalette();
+        const [background] = this.getActivePalette().colors;
         options = { anchorY: .5, backgroundColor: background, ...options };
         return this.say(script, options);
     }
@@ -3248,7 +3354,7 @@ class BipsiPlayback extends EventTarget {
      */
     async touch(event) {
         this.log(`> TOUCHING EVENT ${this.eventDebugInfo(event)}`);
-
+    
         const touch = oneField(event, "touch", "javascript")?.data;
 
         const tags = allTags(event);
@@ -3270,18 +3376,20 @@ class BipsiPlayback extends EventTarget {
             this.story.ChooseChoiceIndex(taggedChoice.index)
             await this.continueStory(event);
         } else {
+            await this.runJS(event, BEHAVIOUR_BEFORE);
             await standardEventTouch(this, event);
+            await this.runJS(event, BEHAVIOUR_AFTER);
         }
     }
 
     async runJS(event, js) {
-        const defines = generateScriptingDefines(this, event);
+        const defines = this.makeScriptingDefines(event);
         const names = Object.keys(defines).join(", ");
-        const preamble = `const { ${names} } = COMMANDS;\n`;
+        const preamble = `const { ${names} } = this;\n`;
 
         try {
-            const script = new AsyncFunction("COMMANDS", preamble + js);
-            await script(defines);
+            const script = new AsyncFunction("", preamble + js);
+            await script.call(defines);
         } catch (e) {
             const long = `> SCRIPT ERROR "${e}"\n---\n${js}\n---`;
             this.log(long);
@@ -3289,6 +3397,12 @@ class BipsiPlayback extends EventTarget {
             const error = `SCRIPT ERROR:\n${e}`;
             this.showError(error);
         }
+    }
+
+    makeScriptingDefines(event) {
+        const defines = bindScriptingDefines(SCRIPTING_FUNCTIONS);
+        addScriptingConstants(defines, this, event);
+        return defines;
     }
 
     playMusic(src) {
@@ -3329,7 +3443,7 @@ class BipsiPlayback extends EventTarget {
     getActivePalette() {
         const avatar = getEventById(this.data, this.avatarId);
         const room = roomFromEvent(this.data, avatar);
-        const palette = this.data.palettes[room.palette];
+        const palette = getPaletteById(this.data, room.palette);
         return palette;
     }
 }
@@ -3466,33 +3580,142 @@ const WALK_DIRECTIONS = {
     "v": [ 0,  1],
 }
 
-/**
- * @param {BipsiPlayback} playback 
- * @param {BipsiDataEvent} event 
- */
-function generateScriptingDefines(playback, event) {
-    // edit here to add new scripting functions
-    const defines = {};
+function bindScriptingDefines(defines) {
+    const bound = {};
+
+    for (const [name, func] of Object.entries(defines)) {
+        bound[name] = func.bind(bound);
+    }
+
+    return bound;
+}
+
+const FIELD = (event, name, type=undefined) => oneField(event, name, type)?.data;
+const FIELDS = (event, name, type=undefined) => allFields(event, name, type).map((field) => field.data);
+const IS_TAGGED = (event, name) => eventIsTagged(event, name);
+
+const SCRIPTING_FUNCTIONS = {
+    SAY(dialogue, options) {
+        return this.PLAYBACK.say(dialogue, options);
+    },
+
+    SAY_FIELD(name, options=undefined, event=this.EVENT) {
+        const text = this.FIELD(event, name, "dialogue") ?? `[FIELD MISSING: ${name}]`;
+        return this.SAY(text, options);
+    },
+
+    TITLE(dialogue, options) {
+        return this.PLAYBACK.title(dialogue, options);
+    },
+
+    TOUCH(event) {
+        return this.PLAYBACK.touch(event);
+    },
+
+    EVENT_AT(location) {
+        return getEventAtLocation(this.PLAYBACK.data, location);
+    },
+
+    LOCATION_OF(event) {
+        return getLocationOfEvent(this.PLAYBACK.data, event);
+    },
+
+    FIND_EVENTS(tag) {
+        return findEventsByTag(this.PLAYBACK.data, tag);
+    },
+
+    FIND_EVENT(tag) {
+        return findEventByTag(this.PLAYBACK.data, tag); 
+    },
+
+    PLAY_MUSIC(file) {
+        this.PLAYBACK.playMusic(this.PLAYBACK.getFileObjectURL(file));
+    },
+    STOP_MUSIC() {
+        this.PLAYBACK.stopMusic();
+    },
+
+    SHOW_IMAGE(id, file, layer, x, y) {
+        this.PLAYBACK.showImage(id, file, layer, x, y);
+    },
+    HIDE_IMAGE(id) {
+        this.PLAYBACK.hideImage(id);
+    },
+
+    FILE_TEXT(file) { 
+        return this.PLAYBACK.stateManager.resources.get(file).text();
+    },
+
+    FIELD_OR_LIBRARY(field, event=this.EVENT) {
+        let file = FIELD(event, field, "file");
+        let name = FIELD(event, field, "text");
+
+        if (!file && name && this.LIBRARY) {
+            file = FIELD(this.LIBRARY, name, "file");
+        } else if (!file && this.LIBRARY) {
+            file = FIELD(this.LIBRARY, field, "file");
+        }
+
+        return file;
+    },
+
+    DO_STANDARD() { 
+        return standardEventTouch(this.PLAYBACK, this.EVENT); 
+    },
+
+    MOVE(event, location) {
+        moveEvent(this.PLAYBACK.data, event, location); 
+    },
+
+    FIELD,
+    FIELDS,
+    SET_FIELDS(event, name, type, ...values) {
+        replaceFields(event, name, type, ...values);
+    },
+
+    $FIELD(name, type=undefined, event=this.EVENT) {
+        return this.FIELD(event, name, type);
+    },
+    $FIELDS(name, type=undefined, event=this.EVENT) {
+        return this.FIELDS(event, name, type);
+    },
+    $SET_FIELDS(name, type=undefined, ...values) {
+        return this.SET_FIELDS(this.EVENT, name, type, ...values);
+    },
     
-    defines.PLAYBACK = playback;
-    defines.AVATAR = getEventById(playback.data, playback.avatarId);
-    defines.LIBRARY = getEventById(playback.data, playback.libraryId);
-    defines.EVENT = event;
-    defines.PALETTE = playback.getActivePalette();
+    IS_TAGGED,
+    TAG(event, name) {
+        replaceFields(event, name, "tag", true);
+    },
+    UNTAG(event, name) {
+        clearFields(event, name, "tag");
+    },
 
-    defines.DO_STANDARD = () => standardEventTouch(playback, event);
+    $IS_TAGGED(name, event=this.EVENT) {
+        return this.IS_TAGGED(event, name);
+    },
+    $TAG(name, event=this.EVENT) {
+        this.TAG(event, name);
+    },
+    $UNTAG(name, event=this.EVENT) {
+        this.UNTAG(event, name);
+    },
 
-    defines.SET_FIELDS = (event, name, type, ...values) => replaceFields(event, name, type, ...values);
-    defines.FIELD = (event, name, type=undefined) => oneField(event, name, type)?.data;
-    defines.FIELDS = (event, name, type=undefined) => allFields(event, name, type).map((field) => field.data);
-    
-    defines.IS_TAGGED = (event, name) => eventIsTagged(event, name);
-    defines.TAG = (event, name) => replaceFields(event, name, "tag", true);
-    defines.UNTAG = (event, name) => clearFields(event, name, "tag");
+    REMOVE(event=this.EVENT) {
+        removeEvent(this.PLAYBACK.data, event);
+    },
+    $REMOVE(event=this.EVENT) {
+        this.REMOVE(event);
+    },
 
-    defines.SET_GRAPHIC = (event, tile) => replaceFields(event, "graphic", "tile", tile);
+    SET_GRAPHIC(event, tile) {
+        replaceFields(event, "graphic", "tile", tile);
+    },
+    $SET_GRAPHIC(tile, event=this.EVENT) {
+        this.SET_GRAPHIC(event, tile);
+    },
 
-    defines.WALK = async (event, sequence, delay=.4, wait=.4) => {
+    async WALK(event, sequence, delay=.4, wait=.4) {
         const dirs = Array.from(sequence);
         for (const dir of dirs) {
             if (dir === ".") {
@@ -3506,77 +3729,89 @@ function generateScriptingDefines(playback, event) {
                 await sleep(delay * 1000);
             }
         }
-    };
-    defines.MOVE = (event, location) => moveEvent(playback.data, event, location);
-    defines.REMOVE = (event) => removeEvent(playback.data, event);
+    },
+    async $WALK(sequence, delay=.4, wait=.4, event=this.EVENT) {
+        return this.WALK(event, sequence, delay, wait);
+    },
 
-    defines.TOUCH = (event) => playback.touch(event);
-    defines.EVENT_AT = (location) => getEventAtLocation(playback.data, location);
-    defines.LOCATION_OF = (event) => getLocationOfEvent(playback.data, event);
-    defines.FIND_EVENTS = (tag) => findEventsByTag(playback.data, tag); 
-    defines.FIND_EVENT = (tag) => findEventByTag(playback.data, tag); 
+    GET(key, fallback=undefined, target=undefined) {
+        key = target ? `${this.EVENT_ID(target)}/${key}` : key;
+        return this.PLAYBACK.variables.get(key) ?? fallback;
+    },
+    SET(key, value, target=undefined) {
+        key = target ? `${this.EVENT_ID(target)}/${key}` : key;
+        this.PLAYBACK.setVariable(key, value);
+    },
+    $GET(key, fallback=undefined, target=this.EVENT) {
+        return this.GET(key, fallback, target);
+    },
+    $SET(key, value, target=this.EVENT) {
+        this.SET(key, value, target);
+    },
 
-    defines.GET = (key, fallback=undefined) => playback.variables.get(key) ?? fallback;
-    defines.SET = (key, value) => playback.setVariable(key, value);
+    EVENT_ID(event) { 
+        return event.id; 
+    },
+    TEXT_REPLACE(text, ...values) {
+        return replace(text, ...values);
+    },
 
-    defines.EVENT_ID = (event) => event.id;
+    LOG(...data) {
+        this.PLAYBACK.log(...data);
+    },
+    DELAY(seconds) {
+        return sleep(seconds * 1000);
+    },
 
-    defines.TEXT_REPLACE = (text, ...values) => replace(text, ...values);
+    RESTART() {
+        this.PLAYBACK.end();
+    },
 
-    defines.SAY = async (dialogue, options) => playback.say(dialogue, options);
-    defines.SAY_FIELD = async (name, options) => {
-        let text = oneField(event, name, "dialogue")?.data ?? `[FIELD MISSING: ${name}]`;
-        await playback.say(text, options);
+    SAMPLE(id, type, ...values) {
+        return sample(this.PLAYBACK, id, type, ...values);
+    },
+    SET_CSS(name, value) {
+        ONE(":root").style.setProperty(name, value);
+    },
+
+    RUN_JS(script, event=this.EVENT) {
+        this.PLAYBACK.runJS(event, script);
+    },
+
+    ADD_BEHAVIOURS(...scripts) {
+        this.PLAYBACK.extra_behaviours.push(...scripts);
+    },
+    POST(message, origin="*") {
+        postMessageParent(message, origin);
+    },
+    //binksi
+    SET_INK_VAR(field, value) {
+        this.STORY.variablesState.$(field, value);
+    },
+    GET_INK_VAR(field) {
+        this.STORY.variablesState.$(field);
+    },
+    DIVERT_TO(knot_name) {
+        this.STORY.ChoosePathString(knot_name);
+        return this.PLAYBACK.continueStory();
     }
+}
 
-    defines.TITLE = async (dialogue, options) => playback.title(dialogue, options);
+/**
+ * @param {BipsiPlayback} playback 
+ * @param {BipsiDataEvent} event 
+ */
+function addScriptingConstants(defines, playback, event) {
+    // edit here to add new scripting functions
+    defines.PLAYBACK = playback;
+    defines.AVATAR = getEventById(playback.data, playback.avatarId);
+    defines.LIBRARY = getEventById(playback.data, playback.libraryId);
+    defines.EVENT = event;
+    defines.PALETTE = playback.getActivePalette();
+
     defines.DIALOGUE = playback.dialoguePlayback.waiter;
     defines.DIALOG = defines.DIALOGUE;
-
-    defines.LOG = (...data) => playback.log(...data);
-    defines.DELAY = async (seconds) => sleep(seconds * 1000);
-
-    defines.RESTART = () => playback.end();
-
-    defines.SAMPLE = (id, type, ...values) => sample(playback, id, type, ...values);
-    defines.SET_CSS = (name, value) => ONE(":root").style.setProperty(name, value);
-
-    defines.RUN_JS = (script, event=defines.EVENT) => playback.runJS(event, script);
-    defines.ADD_BEHAVIOURS = (...scripts) => playback.extra_behaviours.push(...scripts);
-    
-    defines.PLAY_MUSIC = (file) => playback.playMusic(playback.getFileObjectURL(file));
-    defines.STOP_MUSIC = () => playback.stopMusic();
-
-    defines.SHOW_IMAGE = (id, file, layer, x, y) => playback.showImage(id, file, layer, x, y);
-    defines.HIDE_IMAGE = (id) => playback.hideImage(id);
-
-    defines.FILE_TEXT = (file) => playback.stateManager.resources.get(file).text();
-
-    defines.FIELD_OR_LIBRARY = (field, event=defines.EVENT) => {
-        let file = oneField(event, field, "file")?.data;
-        let name = oneField(event, field, "text")?.data;
-
-        if (!file && name && defines.LIBRARY) {
-            file = oneField(defines.LIBRARY, name, "file")?.data;
-        } else if (!file && defines.LIBRARY) {
-            file = oneField(defines.LIBRARY, field, "file")?.data;
-        }
-
-        return file;
-    };
-
-    defines.POST = (message, origin="*") => postMessageParent(message, origin);
-
-    //binksi
     defines.STORY = playback.story;
-    defines.SET_INK_VAR = (field, value) => playback.story.variablesState.$(field, value);
-    defines.GET_INK_VAR = (field) => playback.story.variablesState.$(field);
-    defines.DIVERT_TO = (knot_name) => {
-        playback.story.ChoosePathString(knot_name);
-        return playback.continueStory(event);
-    }
-
-    return defines;
 }
 
     </script>
@@ -3584,11 +3819,11 @@ function generateScriptingDefines(playback, event) {
  * @param {CanvasRenderingContext2D} destination 
  * @param {CanvasRenderingContext2D} tileset 
  * @param {Map<number, number>} tileToFrame 
- * @param {string[]} palette 
+ * @param {BipsiDataPalette} palette 
  * @param {BipsiDataRoom} room
  */
  function drawRoomPreview(destination, tileset, tileToFrame, palette, room) {
-    const [background] = palette;
+    const [background] = palette.colors;
 
     fillRendering2D(destination, background);
     drawTilemapLayer(destination, tileset, tileToFrame, palette, room);
@@ -3615,7 +3850,7 @@ function generateScriptingDefines(playback, event) {
 function drawRoomPreviewPlayback(destination, playback, roomId) {
     const tileset = playback.stateManager.resources.get(playback.data.tileset);
     const room = getRoomById(playback.data, roomId);
-    const palette = playback.data.palettes[room.palette];
+    const palette = getPaletteById(playback.data, room.palette);
     const tileToFrame = makeTileToFrameMap(playback.data.tiles, 0);
     drawRoomPreview(destination, tileset, tileToFrame, palette, room);
 }
@@ -3627,7 +3862,7 @@ function drawRoomPreviewPlayback(destination, playback, roomId) {
  */
  function drawRoomThumbPlayback(destination, playback, roomId) {
     const room = getRoomById(playback.data, roomId);
-    const palette = playback.data.palettes[room.palette];
+    const palette = getPaletteById(playback.data, room.palette);
     drawRoomThumbnail(destination, palette, room);
 }
 
@@ -3664,7 +3899,7 @@ function recordFrames(playback) {
     const canvas = ONE("#player-canvas");
     const rendering = canvas.getContext("2d");
     rendering.drawImage(splash, 0, 0);
-    fitCanvasToParent(canvas);
+    scaleElementToParent(canvas.parentElement);
 }
 
     </script>
@@ -3712,6 +3947,13 @@ function makeBlankRoom(id) {
     }
 }
 
+function makeBlankPalette(id) {
+    return {
+        id,
+        colors: ["#3c6fad","#d8d4dd","#ff8e9e"],
+    }
+}
+
 function generateGrid(width, height, gap) {
     const rendering = createRendering2D(width, height);
 
@@ -3740,6 +3982,11 @@ function updateProject(project) {
         .filter((field) => field.type === "location");
     
     const repairLocations = !locationFields.every((location) => getRoomById(project, location.data.room));
+
+    project.palettes.forEach((palette, i) => {
+        if (palette.id !== undefined) return;
+        project.palettes[i] = { id: i, colors: palette };
+    });
 
     project.rooms.forEach((room) => {
         room.backmap = room.backmap ?? ZEROES(16).map(() => REPEAT(16, 0));
@@ -3817,13 +4064,13 @@ class PaletteEditor {
         this.colorHueSat.width += margin * 2;
         this.colorHueSat.height += margin * 2;
 
-        this.colorSelect = ui.radio("color-select");
+        this.colorIndex = ui.radio("color-index");
         this.colorValue = ui.slider("color-value");
         this.colorHex = ui.text("color-hex");
 
-        this.colorSelect.selectedIndex = 0;
+        this.colorIndex.selectedIndex = 0;
 
-        this.colorSelect.addEventListener("change", () => {
+        this.colorIndex.addEventListener("change", () => {
             this.updateTemporaryFromData();
             this.refreshDisplay();
         });
@@ -3890,17 +4137,21 @@ class PaletteEditor {
      */
     getSelections(data = undefined) {
         data = data ?? this.editor.stateManager.present;
-        const [paletteIndex, colorIndex] = this.colorSelect.value.split(",").map((v) => parseInt(v, 10));
-        const palette = this.editor.stateManager.present.palettes[paletteIndex];
-        const dataHex = palette[colorIndex];
+        const colorIndex = this.colorIndex.value;
+        const { paletteIndex } = this.editor.getSelections();
+        const palette = data.palettes[paletteIndex];
+        const dataHex = palette.colors[colorIndex];
 
         return { data, palette, colorIndex, color: this.temporary, dataHex };
     }
 
+    /**
+     * @returns {BipsiDataPalette}
+     */
     getPreviewPalette() {
         const { color, palette, colorIndex } = this.getSelections();
-        const previewPalette = [ ...palette ];
-        previewPalette[colorIndex] = color.hex;
+        const previewPalette = { ...palette, colors: [ ...palette.colors ] };
+        previewPalette.colors[colorIndex] = color.hex;
         return previewPalette;
     }
 
@@ -3910,10 +4161,8 @@ class PaletteEditor {
         const { data, color, palette } = this.getSelections();
 
         // recolor the color select buttons to the corresponding color
-        ALL("#color-select .horizontal-capsule").forEach((capsule, y) => {
-            ALL("label", capsule).forEach((label, x) => {
-                label.style.background = data.palettes[y][x];
-            });
+        ALL("#color-index-select label").forEach((label, i) => {
+            label.style.background = palette.colors[i];
         });
 
         // color wheel:
@@ -3950,9 +4199,9 @@ class PaletteEditor {
 
         this.colorValue.valueAsNumber = color.v;
         this.colorHex.value = color.hex;
-        this.colorSelect.selectedInput.style.setProperty("background", color.hex);
+        this.colorIndex.selectedInput.parentElement.style.setProperty("background", color.hex);
 
-        this.editor.redraw();
+        this.editor.requestRedraw();
     }
 
     updateTemporaryFromData() {
@@ -3973,13 +4222,9 @@ class PaletteEditor {
     }
 
     commitSelectedColorFromTemporary() {
-
-
         this.editor.stateManager.makeChange(async (data) => {
             const { palette, colorIndex, color } = this.getSelections(data);
-    
-            // TODO undoability
-            palette[colorIndex] = color.hex;
+            palette.colors[colorIndex] = color.hex;
         });
 
         this.refreshDisplay();
@@ -4084,6 +4329,15 @@ if (test) {
     library: [
         { key: "is-library", type: "tag", data: true },
     ],
+    plugin: [
+        { key: "is-plugin", type: "tag", data: true },
+        { key: "plugin-order", type: "json", data: 0 },
+        { key: "dummy-plugin", type: "javascript", data: 
+`wrap.before(BipsiPlayback.prototype, "start", function() {
+this.say(FIELD(CONFIG, "dummy-config"));
+});` },
+        { key: "dummy-config", type: "text", data: "hello from dummy-plugin" }
+    ],
 };
 
 function prepareTemplate(element) {
@@ -4123,6 +4377,18 @@ class EventEditor {
         });
         this.fileInfo = ONE("#field-file-info");
 
+        const createUniqueEvent = (tag, template) => {
+            const event = allEvents(this.editor.stateManager.present).find((event) => eventIsTagged(event, tag));
+            this.editor.createEvent(event?.fields ?? template);
+            
+            if (event) {
+                this.editor.stateManager.makeChange(async (data) => {
+                    const room = roomFromEvent(data, event);
+                    arrayDiscard(room.events, event);
+                });
+            }
+        }
+
         ui.action("create-event-empty", () => this.editor.createEvent(EVENT_TEMPLATES.empty));
         ui.action("create-event-tag", () => this.editor.createEvent(EVENT_TEMPLATES.tag));
         ui.action("create-event-code", () => this.editor.createEvent(EVENT_TEMPLATES.code));
@@ -4130,40 +4396,39 @@ class EventEditor {
         ui.action("create-event-message", () => this.editor.createEvent(EVENT_TEMPLATES.message));
         ui.action("create-event-character", () => this.editor.createEvent(EVENT_TEMPLATES.character));
         ui.action("create-event-ending", () => this.editor.createEvent(EVENT_TEMPLATES.ending));
-        ui.action("create-event-player", () => {
-            const avatar = allEvents(this.editor.stateManager.present).find((event) => eventIsTagged(event, "is-player"));
+        ui.action("create-event-player", () => createUniqueEvent("is-player", EVENT_TEMPLATES.player));
+        ui.action("create-event-setup", () => createUniqueEvent("is-setup", EVENT_TEMPLATES.setup));
+        ui.action("create-event-library", () => createUniqueEvent("is-library", EVENT_TEMPLATES.library));
+        ui.action("create-event-plugin", () => this.editor.createEvent(EVENT_TEMPLATES.plugin));
+        
+        ui.action("create-event-plugin-file", async () => {
+            const [file] = await maker.pickFiles("application/javascript");
+            if (!file) return;
 
-            this.editor.createEvent(avatar?.fields ?? EVENT_TEMPLATES.player);
-            
-            if (avatar) {
-                this.editor.stateManager.makeChange(async (data) => {
-                    const room = roomFromEvent(data, avatar);
-                    arrayDiscard(room.events, avatar);
-                });
-            }
+            const js = await maker.textFromFile(file);
+            const fields = [
+                { key: "is-plugin", type: "tag", data: true },
+                { key: "plugin-order", type: "json", data: 0 },
+                { key: "plugin", type: "javascript", data: js },
+                ...fieldsFromPluginCode(js),
+            ];
+
+            this.editor.createEvent(fields);
         });
-        ui.action("create-event-setup", () => {
-            const setup = allEvents(this.editor.stateManager.present).find((event) => eventIsTagged(event, "is-setup"));
-            this.editor.createEvent(setup?.fields ?? EVENT_TEMPLATES.setup);
-            
-            if (setup) {
-                this.editor.stateManager.makeChange(async (data) => {
-                    const room = roomFromEvent(data, setup);
-                    arrayDiscard(room.events, setup);
-                });
+
+        function parseOrNull(json) {
+            try {
+                return JSON.parse(json);
+            } catch {
+                return null;
             }
-        });
-        ui.action("create-event-library", () => {
-            const library = allEvents(this.editor.stateManager.present).find((event) => eventIsTagged(event, "is-library"));
-            this.editor.createEvent(library?.fields ?? EVENT_TEMPLATES.library);
-            
-            if (library) {
-                this.editor.stateManager.makeChange(async (data) => {
-                    const room = roomFromEvent(data, library);
-                    arrayDiscard(room.events, library);
-                });
-            }
-        });
+        }
+
+        function fieldsFromPluginCode(code) {
+            const regex = /\/\/!CONFIG\s+([\w-]+)\s+\(([\w-]+)\)\s*(.*)/g;
+            const fields = Array.from(code.matchAll(regex)).map(([, key, type, json]) => ({ key, type, data: parseOrNull(json)}));
+            return fields;
+        }
 
         this.actions = {
             add: ui.action("add-event-field", () => this.addField()),
@@ -4209,9 +4474,11 @@ class EventEditor {
             });
         });
 
+        
+
         this.valueEditors.javascript.addEventListener("change", () => {
             this.editor.stateManager.makeChange(async (data) => {
-                const { field } = this.getSelections(data);
+                const { field, event } = this.getSelections(data);
                 field.data = this.valueEditors.javascript.value;
             });
         });
@@ -4279,7 +4546,7 @@ class EventEditor {
                 this.editor.dialoguePreviewPlayer.moveToNextPage();
             }
         }
-        this.editor.redraw();
+        this.editor.requestRedraw();
     }
 
     /**
@@ -4497,7 +4764,8 @@ class TileEditor {
 
         const redraw = () => {
             drawTile(tileset, index, temp);
-            this.editor.redraw();
+            this.editor.requestRedraw();
+            //this.editor.redrawFromTileChange();
         };
 
         const drag = ui.drag(event);
@@ -4545,13 +4813,15 @@ class TileEditor {
         if (!tile) return;
 
         this.editor.tileEditor.animateToggle.setCheckedSilent(tile.frames.length > 1);
+        this.editor.actions.swapTileFrames.disabled = tile.frames.length === 1;
+        this.editor.renderings.tilePaint1.canvas.style.opacity = tile.frames.length === 1 ? "0%" : null;
 
-        const [bg, fg, hi] = data.palettes[room.palette];
+        const [bg, fg, hi] = getPaletteById(data, room.palette).colors;
 
-        const color = this.editor.roomPaintTool.selectedIndex === 1 ? hi : fg;
+        const color = this.editor.highlight.checked ? hi : fg;
         const tilesetC = recolorMask(tileset, color);
 
-        const grid = this.editor.tileGrid.checked;
+        const grid = true || this.editor.tileGrid.checked;
 
         [this.editor.renderings.tilePaint0, this.editor.renderings.tilePaint1].forEach((rendering, i) => {
             fillRendering2D(rendering, bg);
@@ -4608,7 +4878,6 @@ class BipsiEditor extends EventTarget {
             tilePaintA: ONE("#tile-paint-a").getContext("2d"),
 
             tileMapPaint: ONE("#tile-map-paint").getContext("2d"),
-            tilePaintRoom: ONE("#tile-paint-room").getContext("2d"),
             paletteRoom: ONE("#palette-room").getContext("2d"),
         };
 
@@ -4626,6 +4895,13 @@ class BipsiEditor extends EventTarget {
                 toggle.checked = false;
             });
         }
+
+        this.frameAdjustWindow = ONE("#frame-adjust-window");
+        this.showFrameAdjust = ui.toggle("show-frame-adjust");
+        this.showFrameAdjust.addEventListener("change", () => {
+            this.frameAdjustWindow.hidden = !this.showFrameAdjust.checked;
+        });
+        autoCloseToggledWindow(this.frameAdjustWindow, this.showFrameAdjust, "show-frame-adjust");
 
         this.logWindow = ONE("#log-window");
         this.showLog = ui.toggle("show-log");
@@ -4646,6 +4922,9 @@ class BipsiEditor extends EventTarget {
 
         this.fieldRoomSelect = new RoomSelect("field-room-select", ONE("#field-room-select-template"));
         this.roomSelectWindow = new RoomSelect("events-room-select", ONE("#room-select-window-template"));
+        this.paletteSelectWindow = new PaletteSelect("palette-select", ONE("#palette-select-window-template"));
+
+        this.colorSelect = new ColorSelect("color-select", ONE("#color-select-template"));
 
         this.moveToRoomSelect = new RoomSelect("move-to-window-room-select", ONE("#move-to-window-room-template"));
         this.moveToPositionSelect = ONE("#move-to-window-position");
@@ -4700,11 +4979,19 @@ class BipsiEditor extends EventTarget {
             this.roomSelectWindowElement.hidden = !this.showRoomSelect.checked;
         });
 
+        this.paletteSelectWindowElement = ONE("#palette-select-window");
+        this.showPaletteSelect = ui.toggle("show-palette-window");
+        autoCloseToggledWindow(this.paletteSelectWindowElement, this.showPaletteSelect, "show-palette-window");
+
+        this.showPaletteSelect.addEventListener("change", () => {
+            this.paletteSelectWindowElement.hidden = !this.showPaletteSelect.checked;
+        });
+
         Object.values(this.renderings).forEach((rendering) => rendering.imageSmoothingEnabled = false);
 
         this.tileBrowser = new TileBrowser(this, "tile-select", ONE("#tile-select-template"));
         this.eventTileBrowser = new EventTileBrowser(this, "field-tile-select", ONE("#field-tile-select-template"));
-        this.roomTileBrowser = new EventTileBrowser(this, "draw-room-tile-select", ONE("#draw-room-tile-template"));
+        // this.roomTileBrowser = new EventTileBrowser(this, "draw-room-tile-select", ONE("#draw-room-tile-template"));
 
         this.tileEditor = new TileEditor(this);
         this.paletteEditor = new PaletteEditor(this);
@@ -4716,6 +5003,7 @@ class BipsiEditor extends EventTarget {
         this.dialoguePreviewPlayer = new DialoguePlayback(256, 256);
         this.dialoguePreviewPlayer.options.font = font;
 
+        this.time = 0;
         let prev;
         const timer = (next) => {
             window.requestAnimationFrame(timer);
@@ -4725,46 +5013,41 @@ class BipsiEditor extends EventTarget {
             next = next ?? Date.now();
             const dt = Math.max(0, (next - prev) / 1000.);
             prev = next;
-            this.dialoguePreviewPlayer.update(dt);
-            this.redrawDialoguePreview();
+            
+            this.update(dt);
         }
         timer();
 
         // find all the ui already defined in the html
+        this.tilePaintFrameSelect = ui.radio("tile-paint-frame");
         this.modeSelect = ui.radio("mode-select");
         this.roomPaintTool = ui.radio("room-paint-tool");
-        this.roomPaletteSelect = ui.select("room-palette");
-        this.tilePaintFrameSelect = ui.radio("tile-paint-frame");
 
-        // this.modeSelect.tab(ONE("#edit-events-tab-controls"), "events");
-        // this.modeSelect.tab(ONE("#room-events-tab"), "events");
-
-        this.modeSelect.tab(ONE("#edit-colors-tab"), "palettes");
-        
-        //this.modeSelect.tab(ONE("#room-select-tab"), "draw-room");
-        this.modeSelect.tab(ONE("#tile-select-tab"), "draw-tiles");
-        
+        this.modeSelect.tab(ONE("#info-tab-body"), "info");
+        this.modeSelect.tab(ONE("#info-tab-viewport"), "info");
         this.modeSelect.tab(ONE("#draw-room-tab-controls"), "draw-room");
 
-        this.modeSelect.tab(ONE("#tile-paint-tab"), "draw-tiles");
         this.modeSelect.tab(ONE("#tile-map-tab"), "draw-room");
-        this.modeSelect.tab(ONE("#palette-tab"), "palettes");
 
         this.modeSelect.tab(ONE("#play-tab-body"), "playtest");
         this.modeSelect.tab(ONE("#play-tab-view"), "playtest");
 
         this.roomPaintTool.tab(ONE("#draw-room-events-controls"), "events");
         this.roomPaintTool.tab(ONE("#room-events-toolbar"), "events");
+        this.roomPaintTool.tab(ONE("#draw-room-palette-controls"), "color");
 
-        this.roomPaintTool.tab(ONE("#draw-room-tile-select"), "tile", "high", "pick");
-        // this.roomPaintTool.tab(ONE("#draw-room-tile-manage"), "tile", "high", "pick");
-        this.roomPaintTool.tab(ONE("#room-palette-select"), "tile", "high", "pick", "shift", "wall");
+        this.roomPaintTool.tab(ONE("#draw-room-tile-controls"), "tile", "high", "pick");
+        this.roomPaintTool.tab(ONE("#highlight-toggle"), "tile", "high", "pick");
+        this.roomPaintTool.tab(ONE("#picker-toggle"), "tile", "high", "pick");
 
         this.roomGrid = ui.toggle("room-grid");
-        this.roomGrid.addEventListener("change", () => this.redraw());
+        this.roomGrid.addEventListener("change", () => this.requestRedraw());
 
         this.tileGrid = ui.toggle("tile-grid");
-        this.tileGrid.addEventListener("change", () => this.redraw());
+        this.tileGrid.addEventListener("change", () => this.requestRedraw());
+
+        this.highlight = ui.toggle("highlight");
+        this.picker = ui.toggle("tile-picker");
 
         // initial selections
         this.modeSelect.selectedIndex = 0;
@@ -4790,10 +5073,11 @@ class BipsiEditor extends EventTarget {
             // editor menu
             save: ui.action("save", () => this.save()),
             export_: ui.action("export", () => this.exportProject()),
-            export_json: ui.action("export_json", () => this.exportBundle()),
+            exportGamedata: ui.action("export-gamedata", () => this.exportGamedata()),
             import_: ui.action("import_html", () => this.importProject()),
             import_json: ui.action("import_bipsi", () => this.importBundle()),
             import_story: ui.action("import_story", () => this.importStory()),
+            exportTileset: ui.action("export-tileset", () => this.exportTileset()),
             reset: ui.action("reset", () => this.resetProject()),
             update: ui.action("update", () => this.updateEditor()),
 
@@ -4834,6 +5118,12 @@ class BipsiEditor extends EventTarget {
             reorderRoomAfter: ui.action("reorder-room-after", () => this.reorderRoomAfter()),
             deleteRoom: ui.action("delete-room", () => this.deleteRoom()),
 
+            newPalette: ui.action("add-new-palette", () => this.newPalette()),
+            duplicatePalette: ui.action("duplicate-palette", () => this.duplicatePalette()),
+            reorderPaletteBefore: ui.action("reorder-palette-before", () => this.reorderPaletteBefore()),
+            reorderPaletteAfter: ui.action("reorder-palette-after", () => this.reorderPaletteAfter()),
+            deletePalette: ui.action("delete-palette", () => this.deletePalette()),
+
             swapTileFrames: ui.action("swap-tile-frames", () => this.swapSelectedTileFrames()),
 
             copyEvent: ui.action("copy-event", () => this.copySelectedEvent()),
@@ -4858,12 +5148,20 @@ class BipsiEditor extends EventTarget {
 
         // hotkeys
         document.addEventListener("keydown", (event) => {
+            if (event.repeat) return;
+            
             const textedit = isElementTextInput(event.target);
 
             if (event.ctrlKey) {
                 if (event.key === "z" && !textedit) this.actions.undo.invoke();
                 if (event.key === "y" && !textedit) this.actions.redo.invoke();
                 if (event.key === "s") {
+                    // make sure current text editing changes are registered
+                    // before saving
+                    if (textedit) {
+                        event.target.dispatchEvent(new Event("change"));
+                    }
+
                     event.preventDefault();
                     this.actions.save.invoke();
                 }
@@ -4877,19 +5175,27 @@ class BipsiEditor extends EventTarget {
                 });
             }
 
-            if (event.altKey && this.heldColorPick === undefined) {
-                this.heldColorPick = this.roomPaintTool.selectedIndex;
-                this.roomPaintTool.selectedIndex = 2;
+            // if (event.altKey && this.heldColorPick === undefined) {
+            //     this.heldColorPick = this.roomPaintTool.selectedIndex;
+            //     this.roomPaintTool.selectedIndex = 1;
+            //     event.preventDefault();
+            // }
+            if (event.altKey && this.modeSelect.value === "draw-room" && this.roomPaintTool.value === "tile") {
+                this.picker.checked = true;
                 event.preventDefault();
             }
         });
 
         // stop temporarily color picking if the alt key is released
         document.addEventListener("keyup", (event) => {
-            if (!event.altKey && this.heldColorPick !== undefined) {
-                this.roomPaintTool.selectedIndex = this.heldColorPick;
-                this.heldColorPick = undefined;
-                event.preventDefault();
+            // if (!event.altKey && this.heldColorPick !== undefined) {
+            //     this.roomPaintTool.selectedIndex = this.heldColorPick;
+            //     this.heldColorPick = undefined;
+            //     event.preventDefault();
+            // }
+
+            if (!event.altKey) {
+                this.picker.checked = false;
             }
         });
 
@@ -4900,21 +5206,48 @@ class BipsiEditor extends EventTarget {
             if (this.modeSelect.value === "playtest") {
                 this.playtest();
             } else {
-                this.playtestIframe.srcdoc = "";
+                this.playtestIframe.src = "";
             }
         });
 
         this.roomSelectWindow.select.addEventListener("change", () => {
-            const { room } = this.getSelections();
-            this.roomPaletteSelect.selectedIndex = room.palette;
+            const { data, room } = this.getSelections();
+            this.paletteSelectWindow.select.selectedIndex = data.palettes.indexOf(getPaletteById(data, room.palette));
             
             this.selectedEventId = undefined;
-            this.redraw();
+            this.requestRedraw();
             this.eventEditor.refresh();
         });
 
+        this.paletteSelectWindow.select.addEventListener("change", () => {
+            this.stateManager.makeChange(async (data) => {
+                const { room, palette } = this.getSelections(data);
+                room.palette = palette.id;
+            });
+
+            this.requestRedraw();
+            this.eventEditor.refresh();
+        });
+
+        this.colorSelect.select.addEventListener("change", () => {
+            const { data } = this.getSelections();
+            const [id, color] = this.colorSelect.select.value.split(",").map((i) => parseInt(i, 10));
+            const palette = getPaletteById(data, id);
+            const index = data.palettes.indexOf(palette);
+            this.paletteSelectWindow.select.selectedIndex = index;
+            this.paletteEditor.colorIndex.selectedIndex = color;
+
+            this.requestRedraw();
+            this.eventEditor.refresh();
+            this.refreshPaletteSelect();
+        });
+
+        this.highlight.addEventListener("change", () => {
+            this.requestRedraw();
+            this.redrawTileBrowser();
+        })
         this.roomPaintTool.addEventListener("change", () => {
-            this.redraw();
+            this.requestRedraw();
             this.redrawTileBrowser();
 
             const cursors = {
@@ -4929,6 +5262,14 @@ class BipsiEditor extends EventTarget {
             this.renderings.tileMapPaint.canvas.style.cursor = cursors[this.roomPaintTool.value];
         });
 
+        const setSelectedTile = (index) => {
+            this.tilePaintFrameSelect.selectedIndex = 0;
+
+            this.tileBrowser.select.setSelectedIndexSilent(index);
+            // this.roomTileBrowser.select.setSelectedIndexSilent(index);
+            this.tileEditor.redraw();
+        }
+
         this.tileBrowser.select.addEventListener("change", () => {
             if (this.roomPaintTool.selectedIndex > 1) {
                 this.roomPaintTool.selectedIndex = 0;
@@ -4936,25 +5277,19 @@ class BipsiEditor extends EventTarget {
 
             this.tilePaintFrameSelect.selectedIndex = 0;
 
-            this.roomTileBrowser.select.setSelectedIndexSilent(this.tileBrowser.select.selectedIndex);
+            setSelectedTile(this.tileBrowser.select.selectedIndex);
         })
 
-        this.roomTileBrowser.select.addEventListener("change", () => {
-            this.tileBrowser.select.setSelectedIndexSilent(this.roomTileBrowser.select.selectedIndex);
-        });
-
-        this.roomPaletteSelect.addEventListener("change", () => {
-            this.stateManager.makeChange(async (data) => {
-                const { room } = this.getSelections(data);
-                room.palette = this.roomPaletteSelect.selectedIndex;
-            });
-        });
+        // this.roomTileBrowser.select.addEventListener("change", () => {
+        //     setSelectedTile(this.roomTileBrowser.select.selectedIndex);
+        // });
 
         // whenever the project data is changed
         this.stateManager.addEventListener("change", () => {
             this.unsavedChanges = true;
             this.ready = true;
     
+            this.refreshPaletteSelect();
             this.refreshRoomSelect();
 
             this.paletteEditor.updateTemporaryFromData();
@@ -4964,15 +5299,15 @@ class BipsiEditor extends EventTarget {
             this.actions.undo.disabled = !this.stateManager.canUndo;
             this.actions.redo.disabled = !this.stateManager.canRedo;
 
-            const { room } = this.getSelections();
-            this.roomPaletteSelect.selectedIndex = room.palette;
+            const { data, room } = this.getSelections();
+            this.paletteSelectWindow.select.selectedIndex = data.palettes.indexOf(getPaletteById(data, room.palette));
 
             this.redrawTileBrowser();
 
             // render room
-            this.redraw();
+            this.requestRedraw();
             this.tileBrowser.redraw();
-            this.roomTileBrowser.redraw();
+            // this.roomTileBrowser.redraw();
 
             // events
             this.eventEditor.refresh();
@@ -4986,7 +5321,7 @@ class BipsiEditor extends EventTarget {
             if (this.eventEditor.showDialoguePreview) {
                 this.dialoguePreviewPlayer.skip();
                 if (this.dialoguePreviewPlayer.empty) this.eventEditor.resetDialoguePreview();
-                this.redraw();
+                this.requestRedraw();
                 return;
             }
 
@@ -5001,7 +5336,7 @@ class BipsiEditor extends EventTarget {
             };
 
             const redraw = () => {
-                this.redraw();
+                this.requestRedraw();
             };
 
             const positions = trackCanvasStroke(canvas, drag);
@@ -5069,7 +5404,7 @@ class BipsiEditor extends EventTarget {
                 };
             };
 
-            const redraw = () => this.redraw();
+            const redraw = () => this.requestRedraw();
 
             const drag = ui.drag(event);
             const positions = trackCanvasStroke(canvas, drag);
@@ -5080,7 +5415,7 @@ class BipsiEditor extends EventTarget {
 
             const prevTile = room.tilemap[y][x];
 
-            const pal = tool === "high" ? 2 : 1;
+            const pal = this.highlight.checked ? 2 : 1;
             const same = room.tilemap[y][x] === tile.id 
                       && room.backmap[y][x] === 0
                       && room.foremap[y][x] === pal;
@@ -5088,12 +5423,11 @@ class BipsiEditor extends EventTarget {
             const nextTile = same ? 0 : tile.id;
             const nextWall = 1 - room.wallmap[y][x];
 
-            if (tool === "pick" || forcePick) {
+            if (tool === "pick" || forcePick || this.picker.checked) {
                 if (prevTile !== 0) {
-                    this.tileBrowser.selectedTileIndex = Math.max(0, data.tiles.findIndex((tile) => tile.id === prevTile));
-                    this.tileBrowser.redraw();
-                    this.roomTileBrowser.selectedTileIndex = this.tileBrowser.selectedTileIndex;
-                    this.roomTileBrowser.redraw();
+                    const index = Math.max(0, data.tiles.findIndex((tile) => tile.id === prevTile));
+
+                    setSelectedTile(index);
                 }
             } else if (tool === "wall" || tool === "tile" || tool === "high") {    
                 this.stateManager.makeCheckpoint();
@@ -5163,16 +5497,8 @@ class BipsiEditor extends EventTarget {
         };
 
         this.renderings.tileMapPaint.canvas.addEventListener("pointerdown", (event) => onRoomPointer(event, this.renderings.tileMapPaint.canvas));
-        this.renderings.tilePaintRoom.canvas.addEventListener("pointerdown", (event) => onRoomPointer(event, this.renderings.tilePaintRoom.canvas, true));
 
         this.frame = 0;
-
-        window.setInterval(() => {
-            if (!this.ready) return;
-
-            this.frame = 1 - this.frame;
-            this.redraw();
-        }, constants.frameInterval);
 
         this.savedVariables = new Map();
         const refreshVariables = () => {
@@ -5210,6 +5536,7 @@ class BipsiEditor extends EventTarget {
 
         this.EVENT_TILE = await loadImage(constants.eventTile);
         this.WALL_TILE = await loadImage(constants.wallTile);
+        this.PLUGIN_TILE = await loadImage(constants.pluginTile);
     }
 
     /**
@@ -5223,15 +5550,25 @@ class BipsiEditor extends EventTarget {
         const roomIndex = this.roomSelectWindow.select.selectedIndex;
         const tileIndex = this.tileBrowser.selectedTileIndex;
         const frameIndex = this.tilePaintFrameSelect.selectedIndex;
+        const paletteIndex = this.paletteSelectWindow.select.selectedIndex;
+        const colorIndex = this.paletteEditor.colorIndex.selectedIndex;
 
         const tile = data.tiles[tileIndex];
         const room = data.rooms[roomIndex];
+        const palette = data.palettes[paletteIndex];
 
         const tileFrame = tile?.frames[frameIndex] ?? tile?.frames[0];
 
         const event = getEventById(data, this.selectedEventId);
 
-        return { data, tileset, room, roomIndex, frameIndex, tileIndex, tileSize, event, tile, tileFrame };
+        return { 
+            data, 
+            tileset, 
+            roomIndex, room, 
+            paletteIndex, palette, colorIndex,
+            tileIndex, tile, frameIndex, tileSize, 
+            event, tileFrame,
+        }
     }
 
     /**
@@ -5251,28 +5588,57 @@ class BipsiEditor extends EventTarget {
      * @param {CanvasRenderingContext2D} rendering 
      * @param {number} roomIndex 
      */
-    drawRoom(rendering, roomIndex, { palette = undefined, events = true } = {}) {
+    drawRoom(rendering, roomIndex, { palette = undefined } = {}) {
         const { data, tileset } = this.getSelections();
         const room = data.rooms[roomIndex];
         palette = palette ?? data.palettes[room.palette];
-        const [background] = palette;
+        const [background] = palette.colors;
 
         // find current animation frame for each tile
         const tileToFrame = makeTileToFrameMap(data.tiles, this.frame);
 
         fillRendering2D(rendering, background);
         drawTilemapLayer(rendering, tileset, tileToFrame, palette, room);
-        if (events) drawEventLayer(rendering, tileset, tileToFrame, palette, room.events);
+        drawEventLayer(rendering, tileset, tileToFrame, palette, room.events);
+    }
+
+    redrawFromTileChange() {
+        this.tileEditor.redraw();
+    }
+
+    requestRedraw() {
+        this.requestedRedraw = true;
+    }
+
+    update(dt) {
+        if (!this.ready) return;
+
+        // tile animation
+        this.time += dt;
+        while (this.time >= constants.frameInterval * .001) {
+            this.frame = 1 - this.frame;
+            this.time -= constants.frameInterval * .001;
+            this.requestRedraw();
+            this.tileBrowser.setFrame(this.frame);
+        }
+        
+        this.dialoguePreviewPlayer.update(dt);
+        this.redrawDialoguePreview();
+
+        if (this.requestedRedraw) {
+            this.requestedRedraw = false;
+            this.redraw();
+        }
     }
 
     redraw() {
         this.tileEditor.redraw();
 
         const { data, room, tileSize, roomIndex, tileset } = this.getSelections();
-        const palette = this.modeSelect.value === "palettes" 
+        const palette = this.roomPaintTool.value === "color" 
                       ? this.paletteEditor.getPreviewPalette()  
-                      : data.palettes[room.palette];
-        const [background] = palette;
+                      : getPaletteById(data, room.palette);
+        const [background] = palette.colors;
 
         const tileToFrame = makeTileToFrameMap(data.tiles, this.frame);
 
@@ -5310,10 +5676,10 @@ class BipsiEditor extends EventTarget {
         } 
 
         this.refreshRoomSelect();
+        this.refreshPaletteSelect();
 
         this.drawRoom(TEMP_128, roomIndex, { palette });
         this.renderings.paletteRoom.drawImage(TEMP_128.canvas, 0, 0);
-        this.renderings.tilePaintRoom.drawImage(TEMP_128.canvas, 0, 0);
 
         if (!this.eventEditor.showDialoguePreview) {
             this.eventEditor.dialoguePreviewToggle.checked = false;
@@ -5322,7 +5688,9 @@ class BipsiEditor extends EventTarget {
     
             room.events.forEach((event) => {
                 const [x, y] = event.position;
-                TEMP_256.drawImage(this.EVENT_TILE, x * tileSize * 2, y * tileSize * 2);
+                const plugin = IS_TAGGED(event, "is-plugin");
+
+                TEMP_256.drawImage(plugin ? this.PLUGIN_TILE : this.EVENT_TILE, x * tileSize * 2, y * tileSize * 2);
             });
 
             if (this.selectedEventCell && this.roomPaintTool.value === "events") {
@@ -5345,6 +5713,9 @@ class BipsiEditor extends EventTarget {
         this.actions.reorderRoomBefore.disabled = this.roomSelectWindow.select.selectedIndex <= 0;
         this.actions.reorderRoomAfter.disabled = this.roomSelectWindow.select.selectedIndex >= this.stateManager.present.rooms.length - 1;
 
+        this.actions.reorderPaletteBefore.disabled = this.paletteSelectWindow.select.selectedIndex <= 0;
+        this.actions.reorderPaletteAfter.disabled = this.paletteSelectWindow.select.selectedIndex >= this.stateManager.present.palettes.length - 1;
+
         this.redrawDialoguePreview();
     } 
 
@@ -5353,7 +5724,7 @@ class BipsiEditor extends EventTarget {
 
         const thumbs = data.rooms.map((room) => {
             const thumb = createRendering2D(16, 16);
-            drawRoomThumbnail(thumb, data.palettes[room.palette], room);
+            drawRoomThumbnail(thumb, getPaletteById(data, room.palette), room);
             return { id: room.id, thumb: thumb.canvas };
         });
 
@@ -5364,6 +5735,33 @@ class BipsiEditor extends EventTarget {
 
         const thumb = thumbs[this.roomSelectWindow.select.selectedIndex].thumb;
         const canvases = ALL(`[name="show-room-window"] + canvas`);
+        canvases.forEach((canvas) => {
+            const rendering = canvas.getContext("2d");
+            rendering.imageSmoothingEnabled = false;
+            rendering.drawImage(thumb, 0, 0, 16, 16);
+        });
+    }
+
+    refreshPaletteSelect() {
+        const { data, paletteIndex, colorIndex } = this.getSelections();
+
+        const thumbs = data.palettes.map((palette) => {
+            const thumb = createRendering2D(3, 1);
+            drawPaletteThumbnail(thumb, palette);
+            return { id: palette.id, thumb: thumb.canvas };
+        });
+
+        this.paletteSelectWindow.updatePalettes(thumbs);
+
+        if (paletteIndex >= 0) {
+            this.colorSelect.updatePalettes(data.palettes);
+            this.colorSelect.select.setSelectedIndexSilent(paletteIndex * 3 + colorIndex);
+        }
+
+        this.paletteSelectWindow.select.setSelectedIndexSilent(Math.max(this.paletteSelectWindow.select.selectedIndex, 0));
+
+        const thumb = thumbs[this.paletteSelectWindow.select.selectedIndex].thumb;
+        const canvases = ALL(`[name="show-palette-window"] + canvas`);
         canvases.forEach((canvas) => {
             const rendering = canvas.getContext("2d");
             rendering.imageSmoothingEnabled = false;
@@ -5383,9 +5781,9 @@ class BipsiEditor extends EventTarget {
 
     async redrawTileBrowser() {
         const { data, room, tileset } = this.getSelections();
-        const [, foreground, highlight] = data.palettes[room.palette];
+        const [, foreground, highlight] = getPaletteById(data, room.palette).colors;
 
-        const hi = this.roomPaintTool.value === "high" || this.roomPaintTool.value === "events";
+        const hi = this.roomPaintTool.value === "high" || this.highlight.checked || this.roomPaintTool.value === "events";
         const color = hi ? highlight : foreground;
         const tilesetC = recolorMask(tileset, color, TEMP_TILESET0);
 
@@ -5430,7 +5828,7 @@ class BipsiEditor extends EventTarget {
 
             this.tileBrowser.setURIs(uris, canvases);
             this.eventTileBrowser.setURIs(uris, canvases);
-            this.roomTileBrowser.setURIs(uris, canvases);
+            // this.roomTileBrowser.setURIs(uris, canvases);
 
             prev.map(URL.revokeObjectURL);
         });
@@ -5556,6 +5954,7 @@ class BipsiEditor extends EventTarget {
                 drawTile(tileset, tile.frames[1], frame);
             } else {
                 tile.frames = [tile.frames[0]];
+                this.tilePaintFrameSelect.selectedIndex = 0;
             }
         });
     }
@@ -5639,6 +6038,54 @@ class BipsiEditor extends EventTarget {
         });
     }
 
+    async newPalette() {
+        await this.stateManager.makeChange(async (data) => {
+            const { paletteIndex } = this.getSelections(data);
+            const palette = makeBlankPalette(nextPaletteId(data));
+            data.palettes.splice(paletteIndex+1, 0, palette);
+        });
+        this.paletteSelectWindow.select.selectedIndex += 1;
+    }
+
+    async duplicatePalette() {
+        await this.stateManager.makeChange(async (data) => {
+            const { paletteIndex, palette } = this.getSelections(data);
+            const copy = COPY(palette);
+            copy.id = nextPaletteId(data);
+            data.palettes.splice(paletteIndex+1, 0, copy);
+        });
+        this.paletteSelectWindow.select.selectedIndex += 1;
+    }
+
+    async reorderPaletteBefore() {
+        return this.stateManager.makeChange(async (data) => {
+            const { paletteIndex } = this.getSelections(data);
+            const nextIndex = paletteIndex - 1;
+            [data.palettes[nextIndex], data.palettes[paletteIndex]] = [data.palettes[paletteIndex], data.palettes[nextIndex]];
+            this.paletteSelectWindow.select.selectedIndex -= 1;
+        });
+    }
+
+    async reorderPaletteAfter() {
+        return this.stateManager.makeChange(async (data) => {
+            const { paletteIndex } = this.getSelections(data);
+            const nextIndex = paletteIndex + 1;
+            [data.palettes[nextIndex], data.palettes[paletteIndex]] = [data.palettes[paletteIndex], data.palettes[nextIndex]];
+            this.paletteSelectWindow.select.selectedIndex += 1;
+        });
+    }
+
+    async deletePalette() {
+        return this.stateManager.makeChange(async (data) => {
+            const { palette, paletteIndex } = this.getSelections(data);
+            arrayDiscard(data.palettes, palette);
+            const next = Math.max(paletteIndex - 1, 0);
+            data.rooms.forEach((room) => {
+                if (room.palette === palette.id) room.palette = data.palettes[next].id;
+            });
+        });
+    }
+
     createEvent(fieldsTemplate = undefined) {
         this.stateManager.makeChange(async (data) => {
             const { room } = this.getSelections(data);
@@ -5696,7 +6143,7 @@ class BipsiEditor extends EventTarget {
         await this.stateManager.loadBundle(bundle);
         this.unsavedChanges = false;
 
-        this.playtest();
+        this.modeSelect.dispatchEvent(new Event("change"));
     }
 
     async loadStory(story) {
@@ -5711,7 +6158,7 @@ class BipsiEditor extends EventTarget {
 
     async playtest() {
         const html = await this.makeExportHTML(true);
-        this.playtestIframe.srcdoc = html;
+        this.playtestIframe.src = URL.createObjectURL(new Blob([html], { type: "text/html" }));
         this.playtestIframe.hidden = false;
 
         this.logTextElement.replaceChildren("> RESTARTING PLAYTEST\n");
@@ -5719,10 +6166,25 @@ class BipsiEditor extends EventTarget {
 
     gatherPluginsJavascript() {
         const { data } = this.getSelections();
-        const event = findEventByTag(data, "is-plugins") ?? { fields: [] };
-        const fields = event.fields.filter((field) => field.type === "javascript");
-        const javascript = fields.map((field) => `// PLUGIN FROM FIELD "${field.key}"\n${field.data}\n`).join("\n\n");
-        return javascript;
+
+        const event = findEventByTag(data, "is-plugins");
+        const events = findEventsByTag(data, "is-plugin");
+        if (event) events.push(event);
+
+        function getPluginPriority(event) {
+            return parseInt((FIELD(event, "plugin-order") ?? "0").toString(), 10);
+        }
+
+        events.sort((a, b) => getPluginPriority(a) - getPluginPriority(b));
+
+        const sections = events.map((event) => {
+            const configFields = event.fields.filter((field) => field.key !== "plugin");
+            const configsJS = `const CONFIG = { fields: ${JSON.stringify(configFields)} };`;
+            const pluginsJS = `// PLUGIN CODE"\n${FIELD(event, "plugin", "javascript")}\n`;
+            return `(function () {\n// PLUGINS CONFIG\n${configsJS}\n${pluginsJS}\n})();\n`;
+        });
+
+        return sections.join("\n");
     }
 
     async makeExportHTML(debug=false) {
@@ -5764,7 +6226,7 @@ class BipsiEditor extends EventTarget {
         maker.saveAs(blob, name);
     }
 
-    async exportBundle() {
+    async exportGamedata() {
         const bundle = await this.stateManager.makeBundle();
         const name = "bipsi.json";
         const formatted = perfectJson(bundle,{singleLine: ({ key, path, depth }) => {
@@ -5780,6 +6242,17 @@ class BipsiEditor extends EventTarget {
           }});
         const blob = maker.textToBlob(formatted, "application/json");
         maker.saveAs(blob, name);
+    }
+
+    async exportTileset() {
+        return new Promise((resolve, reject) => {
+            const rendering = this.stateManager.resources.get(this.stateManager.present.tileset);
+            const name = "bipsi-tileset.png";
+            rendering.canvas.toBlob((blob) => {
+                maker.saveAs(blob, name);
+                resolve();
+            });
+        });
     }
 
     async importProject() {
@@ -5961,13 +6434,6 @@ class TileBrowser {
         this.select.addEventListener("change", () => this.redraw());
 
         this.frame = 0;
-
-        window.setInterval(() => {
-            if (!this.editor.ready) return;
-            this.frame = 1 - this.frame;
-            this.updateCSS();
-            this.redraw();
-        }, constants.frameInterval);
     }
 
     get selectedTileIndex() {
@@ -5977,6 +6443,12 @@ class TileBrowser {
     set selectedTileIndex(value) { 
         this.select.setValueSilent(value);
         this.select.inputs[this.select.selectedIndex]?.scrollIntoView({ block: "center" }); 
+    }
+
+    setFrame(frame) {
+        this.frame = frame;
+        this.updateCSS();
+        this.redraw();
     }
 
     redraw() {
@@ -6007,7 +6479,7 @@ class TileBrowser {
         const { data, room } = this.editor.getSelections();
 
         root.style.setProperty("--tileset-background-size", `${w}px ${h}px`);
-        root.style.setProperty("--tileset-background-color", data.palettes[room.palette][0]);
+        root.style.setProperty("--tileset-background-color", getPaletteById(data, room.palette).colors[0]);
 
         this.items.map(data.tiles, (tile, item, index) => {
             const { x, y } = getTileCoords(canvases[0], index);
@@ -6198,16 +6670,111 @@ function perfectJson(item) {
   return splitPlaceholder ? "\"".concat(splitPlaceholder, "\"") : result;
 }
     </script>
-    <!--script(data-editor-only)include scripts/editor/palette-picker.js
-    -->
-    <script>async function startPlayback(font, bundle) {
-    const playback = new BipsiPlayback(font);
-    await playback.init();
-    await playback.loadBundle(bundle);
-    playback.start();
+    <script data-editor-only="data-editor-only">class PaletteSelectItem {
+    constructor(root, input, canvas) {
+        this.root = root;
+        this.input = input;
+        this.canvas = canvas;
+        this.rendering = canvas.getContext("2d");
+    }
+
+    setup(id, thumb) {
+        this.input.title = `select palette ${id}`;
+        this.input.value = id;
+        this.rendering.drawImage(thumb, 0, 0);
+    }
+
+    remove() {
+        this.root.remove();
+    }
 }
 
-async function startEditor(font) {
+class PaletteSelect {
+    /**
+     * @param {*} name 
+     * @param {HTMLTemplateElement} template 
+     */
+    constructor(name, template) {
+        this.template = template;
+
+        this.name = name;
+        this.select = ui.radio(name);
+
+        const parent = this.template.parentElement;
+
+        this.items = new IndexedItemPool({
+            create: () => {
+                const clone = this.template.content.firstElementChild.cloneNode(true);
+                const item = new PaletteSelectItem(clone, ONE("input", clone), ONE("canvas", clone));
+                parent.append(clone);
+                return item;
+            },
+            dispose: (item) => item.remove(), 
+        });
+    }
+
+    /**
+     * @param {{ id: number, thumb: HTMLCanvasElement }[]} palettes 
+     */
+    updatePalettes(palettes) {
+        this.items.map(palettes, ({ id, thumb }, item) => item.setup(id, thumb));
+        this.select.replaceInputs(ALL(`input[type="radio"][name="${this.name}"]`));
+    }
+}
+    </script>
+    <script data-editor-only="data-editor-only">class ColorSelectItem {
+    constructor(root, inputs) {
+        this.root = root;
+        this.inputs = inputs;
+    }
+
+    setup(id, colors) {
+        this.inputs.forEach((input, i) => {
+            input.title = `select palette ${id}, color ${i}`;
+            input.value = `${id},${i}`;
+            input.style.backgroundColor = colors[i];
+        });
+    }
+
+    remove() {
+        this.root.remove();
+    }
+}
+
+class ColorSelect {
+    /**
+     * @param {*} name 
+     * @param {HTMLTemplateElement} template 
+     */
+    constructor(name, template) {
+        this.template = template;
+
+        this.name = name;
+        this.select = ui.radio(name);
+
+        const parent = this.template.parentElement;
+
+        this.items = new IndexedItemPool({
+            create: () => {
+                const clone = this.template.content.firstElementChild.cloneNode(true);
+                const item = new ColorSelectItem(clone, ALL("input", clone));
+                parent.append(clone);
+                return item;
+            },
+            dispose: (item) => item.remove(), 
+        });
+    }
+
+    /**
+     * @param {BipsiDataPalette[]} palettes 
+     */
+    updatePalettes(palettes) {
+        this.items.map(palettes, ({ id, colors }, item) => item.setup(id, colors));
+        this.select.replaceInputs(ALL(`input[type="radio"][name="${this.name}"]`));
+    }
+}
+    </script>
+    <script>async function startEditor(font) {
     const editor = new BipsiEditor(font);
     await editor.init();
 
@@ -6242,15 +6809,17 @@ async function makePlayback(font, bundle, story) {
     playback.addEventListener("render", () => {
         fillRendering2D(playRendering);
         playRendering.drawImage(playback.rendering.canvas, 0, 0);
-        fitCanvasToParent(playCanvas);
+        
+        scaleElementToParent(playCanvas.parentElement);
+
         document.documentElement.style.setProperty('--vh', `${window.innerHeight / 100}px`);
     });
 
     // update the canvas size whenever the browser window resizes
-    window.addEventListener("resize", () => fitCanvasToParent(playCanvas));
+    window.addEventListener("resize", () => scaleElementToParent(playCanvas.parentElement));
     
     // update the canvas size initially
-    fitCanvasToParent(playCanvas);
+    scaleElementToParent(playCanvas.parentElement);
 
     let moveCooldown = 0;
     const heldKeys = new Set();
@@ -6504,58 +7073,14 @@ body {
 }
 
 #player {
+    width: 256px;
+    height: 256px;
+
     position: absolute;
-    width: 100%; height: 100%;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+
     overflow: hidden;
-
-    display: flex;
-    flex-direction: column;
-
-    padding-bottom: 0;
-    gap: 1em;
-}
-
-#player-container {
-    flex: 1;
-
-    display: flex;
-    flex-direction: column;
-    justify-content: start;
-    align-items: center;
-
-    margin: 0 auto;
-    max-width: 512px;
-    width: 100%;
-}
-
-@media screen and (max-width: 640px) {
-    #player-container {
-        max-width: 100%;
-        width: 100%;
-    }
-}
-
-
-#player-container #player-choices{
-    margin-top: 0.8em;
-    width: 100%;
-    padding: 1em;
-}
-#player-container #player-choices ul{
-    font-family: "Press Start 2P";
-    list-style: none;
-    font-size: 0.8em;
-    margin: 0; padding: 0
-}
-#player-container #player-choices ul li{
-    margin: 0; padding: 0;
-}
-#player-container #player-choices ul li:not(last-child){
-    margin-bottom: 1em;
-}
-#player-container #player-choices a{
-    color: white;
-    text-decoration: none;
 }
 
     </style>
@@ -6589,7 +7114,7 @@ h1, h2, h3, h4, h5, h6 {
     gap: 1em;
 }
 
-button {
+button, a.button {
     flex: 1;
     flex-direction: column;
     white-space: nowrap;
@@ -6608,7 +7133,7 @@ button {
     padding: .25em;
 }
 
-button:active {
+button:active, a.button:active {
     background-color: #972f26;
 }
 
@@ -6632,7 +7157,7 @@ button:disabled {
     background-color: var(--button-color);
 }
 
-.radio-select input[type="radio"] {
+.radio-select label > input[type="radio"] {
     margin: 0;
     appearance: none;
     -moz-appearance: none;
@@ -6643,12 +7168,12 @@ button:disabled {
     width: 100%; height: 100%;
 }
 
-.radio-select label img, .radio-select label svg, button img, button svg {
+.radio-select > label img, .radio-select > label svg, button img, button svg, a svg {
     pointer-events: none;
     width: 32px; height: 32px;
 }
 
-.radio-select label img, .radio-select label svg {
+.radio-select > label img, .radio-select > label svg {
     position: absolute;
     left: 50%; top: 50%;
     transform: translate(-50%, -50%);
@@ -6723,6 +7248,7 @@ button:disabled {
 
 input[type="text"], textarea {
     font-family: monospace;
+    tab-size: 2;
 
     flex: 1;
     flex-basis: 100%;
@@ -6825,6 +7351,7 @@ select {
 
 .viewport-body {
     position: relative;
+    height: 512px;
 }
 
 .controls-tab {
@@ -6854,10 +7381,15 @@ select {
     max-width: 72px;
 }
 
+#highlight-toggle, #picker-toggle {
+    flex: 0;
+    min-width: 64px;
+}
+
 .tile-select {
     flex: 1;
 
-    padding: .5rem;
+    padding: 7px;
 
     display: flex; flex-direction: row;
     flex-wrap: wrap;
@@ -6885,6 +7417,10 @@ select {
 }
 
 .room-select label > input {
+    background: none;
+}
+
+.palette-select label > input {
     background: none;
 }
 
@@ -6932,23 +7468,6 @@ input + *, input + * + * {
 
 label.toggle#tile-grid {
     max-width: 64px;
-}
-
-.room-picker-toggle {
-    gap: .25rem;
-}
-
-label.room-picker-toggle {
-    flex: 0;
-    /* min-width: 72px; */
-    border-radius: .5rem 1rem 1rem .5rem;
-    padding: 8px;
-    gap: 6px;
-}
-
-label.room-picker-toggle > svg {
-    margin: 0;
-    margin-left: 2px;
 }
 
 .picker-toggle > canvas {
@@ -7019,6 +7538,40 @@ label.room-picker-toggle > svg {
     width: 100%; height: 100%;
 }
 
+.tile-select label > input {
+    background: none;
+}
+
+#palette-select-window canvas {
+    width: 100%; height: 100%;
+}
+
+#palette-select-window label {
+    width: 80px;
+}
+
+.item-select {
+    flex: 1;
+
+    padding: 7px;
+
+    display: flex; flex-direction: row;
+    flex-wrap: wrap;
+    gap: 5px;
+    justify-content: flex-start;
+    align-content: flex-start;
+
+    border-radius: .5rem;
+    background: var(--trans-gradient);
+    overflow: hidden scroll;
+}
+
+.item-select label {
+    min-height: unset;
+
+    width: 40px; height: 40px;
+}
+
 .item-management-buttons {
     display: flex; flex-direction: row;
     gap: .5rem;
@@ -7078,11 +7631,12 @@ label.room-picker-toggle > svg {
 #palette-edit {
     flex: 1;
 
-    border-radius: .5rem;
-    background: var(--trans-gradient);
+    /* border-radius: .5rem; */
+    /* background: var(--trans-gradient); */
 
     padding: 1rem;
     gap: 1rem;
+    padding-right: 0;
 }
 
 #palette-edit-select > :first-child {
@@ -7098,21 +7652,32 @@ label.room-picker-toggle > svg {
 }
 
 #color-select {
+    padding: .5rem;
     gap: .5rem;
+    padding-left: 0;
+}
+
+#color-select > .horizontal-capsule {
+    flex: 0;
 }
 
 #color-select label {
-    min-height: 0;
+    min-height: 44px;
 }
 
-#color-select input[type="radio"]:checked {
+.color-select input[type="radio"]:checked {
     background: none;
     z-index: 5;
     box-shadow: 0 0 0 .5em white;
 }
 
+.color-select label > input {
+    background: none;
+}
+
 #color-edit {
     gap: 1rem;
+    align-items: flex-start;
 }
 
 #controls {
@@ -7179,21 +7744,21 @@ label.room-picker-toggle > svg {
 }
 
 #tile-paint-room {
-    width: 256px; height: 256px;
+    width: 512px; height: 512px;
 
     cursor: crosshair;
 }
 
-#tile-paint-canvases * {
+#tile-paint-canvases > label * {
     background: none;
 }
 
-#tile-paint-canvases input:checked {
+#tile-paint-canvases > label input:checked {
     pointer-events: none;
     background: none;
 }
 
-#tile-paint-canvases input:not(:checked) + canvas {
+#tile-paint-canvases > label input:not(:checked) + canvas {
     pointer-events: none;
     opacity: 50%;
 }
@@ -7438,7 +8003,7 @@ label.room-picker-toggle > svg {
     border-radius: 1rem;
 }
 
-.tile-select input[type="radio"]:checked, .room-select input[type="radio"]:checked {
+.tile-select input[type="radio"]:checked, .room-select input[type="radio"]:checked, .item-select input[type="radio"]:checked {
     z-index: 5;
     background: none;
     box-shadow: 0 0 0 5px white;
@@ -7480,10 +8045,6 @@ label.room-picker-toggle > svg {
     cursor: pointer;
 }
 
-#tile-paint-buttons > * {
-    max-width: unset;
-}
-
 #move-to-window {
     position: absolute;
     width: 512px; height: 256px;
@@ -7510,6 +8071,41 @@ label.room-picker-toggle > svg {
 
     display: flex; flex-direction: column;
     border-radius: 1rem;
+    padding: 1rem; gap: .5rem;
+
+    background: var(--frame-color);
+
+    cursor: initial;
+    z-index: 100;
+
+    box-shadow: 0 0 0 2px black;
+}
+
+#palette-select-window {
+    position: absolute;
+    width: 512px; height: 320px;
+    bottom: calc(48px + .5rem);
+
+    display: flex; flex-direction: column;
+    border-radius: 1rem;
+    padding: 1rem; gap: .5rem;
+
+    background: var(--frame-color);
+
+    cursor: initial;
+    z-index: 100;
+
+    box-shadow: 0 0 0 2px black;
+}
+
+#frame-adjust-window {
+    position: absolute;
+    width: 256px;
+    right: 0;
+    bottom: calc(72px + .5rem);
+
+    display: flex; flex-direction: column;
+    border-radius: 1.5rem;
     padding: 1rem; gap: .5rem;
 
     background: var(--frame-color);
@@ -7595,17 +8191,37 @@ label.room-picker-toggle > svg {
     gap: 1rem;
 }
 
-#tile-paint-canvases {
+#tile-paint-row {
+    gap: .5rem;
     flex: 0;
+}
+
+#tile-paint-row > .column {
+    gap: .5rem;
+    max-width: 72px;
+}
+
+#tile-paint-canvases {
+    flex: 1;
 
     display: flex; flex-direction: row;
 
-    padding: 1rem; gap: 1rem;
+    padding: .5rem; gap: 1rem;
     background: var(--trans-gradient);
-    border-radius: 1rem;
+    border-radius: .5rem;
 
-    align-items: center;
+    align-items: stretch;
     justify-content: space-evenly;
+}
+
+
+#tile-paint-canvases > label {
+    /* height: calc(160px + 1rem); */
+    height: 160px;
+
+    /* padding: .5rem; */
+    /* border-radius: .5rem; */
+    /* background: var(--trans-gradient); */
 }
 
 #tile-paint-canvases canvas {
@@ -7613,22 +8229,26 @@ label.room-picker-toggle > svg {
     cursor: crosshair;
 }
 
-#tile-paint-buttons {
+.tile-paint-buttons {
     flex: 1;
     gap: .5rem;
     display: flex; flex-direction: column;
 }
 
-#tile-paint-buttons > .row {
+.tile-paint-buttons > .row {
     gap: 8px;
 }
 
-#tile-paint-buttons > .grid3 {
+.tile-paint-buttons > .grid3 {
     gap: 2px;
 }
 
-#tile-paint-buttons button {
+.tile-paint-buttons button {
     height: 48px;
+}
+
+.tile-paint-buttons > * {
+    max-width: unset;
 }
 
 #tile-paint-a {
@@ -7643,12 +8263,13 @@ label.room-picker-toggle > svg {
     flex: 0;
 }
 
-#color-select label > input {
-    background: none;
+#info-tab-body, #play-tab-body {
+    font-size: larger;
 }
 
-#play-tab-body {
-    font-size: larger;
+p {
+    margin: 0;
+    margin-bottom: 1rem;
 }
 
 #room-events-toolbar {
@@ -7696,13 +8317,111 @@ label.room-picker-toggle > svg {
     display: flex; flex-direction: column;
 }
 
+#tile-select-row {
+    overflow: hidden;
+}
+
+#tile-management {
+    flex: 0; gap: 2px;
+    flex-direction: column;
+}
+
+#tile-management button {
+    max-width: 48px;
+}
+
+#tile-management > * {
+    border-radius: 0;
+}
+
+#tile-management > :first-child {
+    border-radius: 0 1rem 0 0;
+}
+
+#tile-management > :last-child {
+    border-radius: 0 0 1rem 0;
+}
+
+#frame-column {
+    gap: .5rem;
+    flex: 1;
+
+    justify-content: center;
+}
+
+#frame-column label, #frame-column button {
+    max-width: none;
+    min-height: 48px;
+    flex: 0;
+}
+
+#draw-room-tile-controls {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+#color-index-select {
+    height: 48px;
+}
+
+#palette-edit {
+    width: 278px;
+}
+
+#color-huesat {
+    width: 270px;
+    height: 270px;
+}
+
+.info-action-list > .button, .info-action-list > button {
+    flex: 0;
+
+    display: flex; flex-direction: row;
+    padding: .5rem; gap: .5rem;
+    justify-content: flex-start;
+    
+    font-size: 16px;
+}
+
+.info-action-list > .button {
+    color: black;
+    text-decoration: none;
+}
+
+.info-action-list {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(2, 1fr);
+}
+
+#info-tab-viewport {
+    width: 512px;
+}
+
+#info-tab-viewport svg {
+    width: 100%; height: 100%;
+}
+
+#draw-room-palette-controls {
+    display: flex; flex-direction: row;
+    background: var(--trans-gradient);
+    border-radius: .5rem 0 0 .5rem;
+    /* gap: 1rem; */
+    overflow: hidden;
+}
+
+#color-select {
+    padding-left: .5rem;
+    overflow: hidden scroll;
+}
+
     </style>
   </head>
   <body class="no-select" onload="start()">
     <div id="player" hidden="hidden">
-      <div id="player-container">
-        <canvas id="player-canvas" width="256" height="256"></canvas>
-      </div>
+      <canvas id="player-canvas" width="256" height="256"></canvas>
     </div>
     <div id="editor" data-editor-only="data-editor-only">
       <div id="viewport">
@@ -7755,57 +8474,31 @@ label.room-picker-toggle > svg {
             </label>
           </div>
         </div>
+        <div class="viewport-tab-body" id="info-tab-viewport"><?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+	 width="720px" height="720px" viewBox="0 0 720 720" enable-background="new 0 0 720 720" xml:space="preserve">
+<g id="Layer_2">
+	<path fill="#F0EBE9" d="M672.05,359.963c4.688,171.484-130.471,321.484-312.109,317.578
+		C178.3,673.635,47.832,535.356,47.832,359.963c0-175.393,139.734-317.578,312.107-317.578S667.362,188.479,672.05,359.963z"/>
+</g>
+<g id="Layer_3">
+	<path fill="#DE3053" d="M215.019,444.729c0,0-139.771,10.084-131.25-128.904c0,0,5.469-86.719,60.156-147.656
+		c0,0,12.408-15.36,27.323-15.353c0,0,26.667-0.398,38.302,41.134c0,0,8.594,28.125,28.906,31.25c0,0,17.969,6.25,57.029-42.188
+		c0,0,21.094-26.91,37.5-26.826c0,0,24.219-0.083,25.781,51.045c0,0,13.281,135.938-13.281,181.25
+		C345.488,388.479,319.705,442.385,215.019,444.729z"/>
+</g>
+<g id="Layer_4">
+	<path fill="#061C92" d="M525.246,206.146c0,0-31.333-46-9.333-66.667c0,0,30.419-26.479,71.087,35.521
+		c0,0,58,80.667,62.666,168.667c0,0,2.913,116.479-49.087,180.479c0,0-82.245,124.854-206.666,129.332
+		c0,0-204.913,5.521-224.246-98.479c0,0-12.667-68.001,110.248-86.188c0,0,87.664-9.334,121.998-62c0,0,32.666-46.813,97.666-20.334
+		c0,0,53,15,58.334-79.667C557.913,306.812,557.913,261.479,525.246,206.146z"/>
+</g>
+</svg>
+
+        </div>
         <div class="viewport-tab-body" id="palette-tab" hidden="hidden">
           <canvas id="palette-room" width="128" height="128" draggable="false"></canvas>
-        </div>
-        <div class="viewport-tab-body" id="tile-paint-tab" hidden="hidden">
-          <div id="tile-paint-body">
-            <div class="row">
-              <canvas id="tile-paint-a" width="8" height="8" draggable="false" title="tile animation preview"></canvas>
-              <div class="radio-select" id="tile-paint-canvases">
-                <label>
-                  <input type="radio" name="tile-paint-frame"/>
-                  <canvas id="tile-paint-0" width="160" height="160" draggable="false" title="edit tile frame 0"></canvas>
-                </label>
-                <label>
-                  <input type="radio" name="tile-paint-frame"/>
-                  <canvas id="tile-paint-1" width="160" height="160" draggable="false" title="edit tile frame 1"></canvas>
-                </label>
-              </div>
-            </div>
-            <div id="tile-paint-previews">
-              <canvas id="tile-paint-room" width="128" height="128" draggable="false"></canvas>
-              <div id="tile-paint-buttons">
-                <div class="grid3">
-                  <button name="rotate-tile-anticlockwise" title="rotate tile anticlockwise"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1.146 4.854a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 4H12.5A2.5 2.5 0 0 1 15 6.5v8a.5.5 0 0 1-1 0v-8A1.5 1.5 0 0 0 12.5 5H2.707l3.147 3.146a.5.5 0 1 1-.708.708l-4-4z"/></svg></button>
-                  <button name="shift-tile-up" title="shift tile up"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 15a.5.5 0 0 0 .5-.5V2.707l3.146 3.147a.5.5 0 0 0 .708-.708l-4-4a.5.5 0 0 0-.708 0l-4 4a.5.5 0 1 0 .708.708L7.5 2.707V14.5a.5.5 0 0 0 .5.5z"/></svg></button>
-                  <button name="rotate-tile-clockwise" title="rotate tile clockwise"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-90deg-right" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M14.854 4.854a.5.5 0 0 0 0-.708l-4-4a.5.5 0 0 0-.708.708L13.293 4H3.5A2.5 2.5 0 0 0 1 6.5v8a.5.5 0 0 0 1 0v-8A1.5 1.5 0 0 1 3.5 5h9.793l-3.147 3.146a.5.5 0 0 0 .708.708l4-4z"/></svg></button>
-                  <button name="shift-tile-left" title="shift tile left"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/></svg></button>
-                  <button name="shift-tile-down" title="shift tile down"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z"/></svg></button>
-                  <button name="shift-tile-right" title="shift tile right"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/></svg></button>
-                </div>
-                <div class="horizontal-capsule">
-                  <button name="mirror-tile" title="mirror tile"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M7 2.5a.5.5 0 0 0-.939-.24l-6 11A.5.5 0 0 0 .5 14h6a.5.5 0 0 0 .5-.5v-11zm2.376-.484a.5.5 0 0 1 .563.245l6 11A.5.5 0 0 1 15.5 14h-6a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .376-.484zM10 4.46V13h4.658L10 4.46z"/></svg></button>
-                  <button name="flip-tile" title="flip tile"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.5 7a.5.5 0 0 0 .24-.939l-11-6A.5.5 0 0 0 2 .5v6a.5.5 0 0 0 .5.5h11zm.485 2.376a.5.5 0 0 1-.246.563l-11 6A.5.5 0 0 1 2 15.5v-6a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .485.376zM11.539 10H3v4.658L11.54 10z"/></svg></button>
-                  <button name="invert-tile" title="invert tile"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M9.05.435c-.58-.58-1.52-.58-2.1 0L.436 6.95c-.58.58-.58 1.519 0 2.098l6.516 6.516c.58.58 1.519.58 2.098 0l6.516-6.516c.58-.58.58-1.519 0-2.098L9.05.435zM8 .989c.127 0 .253.049.35.145l6.516 6.516a.495.495 0 0 1 0 .7L8.35 14.866a.493.493 0 0 1-.35.145V.989z"/></svg></button>
-                </div>
-                <div class="horizontal-capsule">
-                  <button name="copy-tile-frame" title="copy frame"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13 0H6a2 2 0 0 0-2 2 2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2 2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm0 13V4a2 2 0 0 0-2-2H5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1zM3 4a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4z"/></svg></button>
-                  <button name="paste-tile-frame" title="paste frame"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 11a1 1 0 1 1 2 0v1a1 1 0 1 1-2 0v-1zm6-4a1 1 0 1 1 2 0v5a1 1 0 1 1-2 0V7zM7 9a1 1 0 0 1 2 0v3a1 1 0 1 1-2 0V9z"/><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg></button>
-                  <button name="clear-tile-frame" title="clear frame"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
-                </div>
-                <div class="row">
-                  <button name="swap-tile-frames" title="swap frames"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1 11.5a.5.5 0 0 0 .5.5h11.793l-3.147 3.146a.5.5 0 0 0 .708.708l4-4a.5.5 0 0 0 0-.708l-4-4a.5.5 0 0 0-.708.708L13.293 11H1.5a.5.5 0 0 0-.5.5zm14-7a.5.5 0 0 1-.5.5H2.707l3.147 3.146a.5.5 0 1 1-.708.708l-4-4a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 4H14.5a.5.5 0 0 1 .5.5z"/></svg></button>
-                  <label class="toggle">
-                    <input type="checkbox" name="tile-animated" title="toggle animated"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M10.804 8 5 4.633v6.734L10.804 8zm.792-.696a.802.802 0 0 1 0 1.392l-6.363 3.692C4.713 12.69 4 12.345 4 11.692V4.308c0-.653.713-.998 1.233-.696l6.363 3.692z"/></svg>
-                  </label>
-                  <label class="toggle">
-                    <input type="checkbox" name="tile-grid" title="toggle grid"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-border" viewBox="0 0 16 16"><path d="M0 0h.969v.5H1v.469H.969V1H.5V.969H0V0zm2.844 1h-.938V0h.938v1zm1.875 0H3.78V0h.938v1zm1.875 0h-.938V0h.938v1zm.937 0V.969H7.5V.5h.031V0h.938v.5H8.5v.469h-.031V1H7.53zm2.813 0h-.938V0h.938v1zm1.875 0h-.938V0h.938v1zm1.875 0h-.938V0h.938v1zM15.5 1h-.469V.969H15V.5h.031V0H16v.969h-.5V1zM1 1.906v.938H0v-.938h1zm6.5.938v-.938h1v.938h-1zm7.5 0v-.938h1v.938h-1zM1 3.78v.938H0V3.78h1zm6.5.938V3.78h1v.938h-1zm7.5 0V3.78h1v.938h-1zM1 5.656v.938H0v-.938h1zm6.5.938v-.938h1v.938h-1zm7.5 0v-.938h1v.938h-1zM.969 8.5H.5v-.031H0V7.53h.5V7.5h.469v.031H1v.938H.969V8.5zm1.875 0h-.938v-1h.938v1zm1.875 0H3.78v-1h.938v1zm1.875 0h-.938v-1h.938v1zm1.875-.031V8.5H7.53v-.031H7.5V7.53h.031V7.5h.938v.031H8.5v.938h-.031zm1.875.031h-.938v-1h.938v1zm1.875 0h-.938v-1h.938v1zm1.875 0h-.938v-1h.938v1zm1.406 0h-.469v-.031H15V7.53h.031V7.5h.469v.031h.5v.938h-.5V8.5zM0 10.344v-.938h1v.938H0zm7.5 0v-.938h1v.938h-1zm8.5-.938v.938h-1v-.938h1zM0 12.22v-.938h1v.938H0zm7.5 0v-.938h1v.938h-1zm8.5-.938v.938h-1v-.938h1zM0 14.094v-.938h1v.938H0zm7.5 0v-.938h1v.938h-1zm8.5-.938v.938h-1v-.938h1zM.969 16H0v-.969h.5V15h.469v.031H1v.469H.969v.5zm1.875 0h-.938v-1h.938v1zm1.875 0H3.78v-1h.938v1zm1.875 0h-.938v-1h.938v1zm.937 0v-.5H7.5v-.469h.031V15h.938v.031H8.5v.469h-.031v.5H7.53zm2.813 0h-.938v-1h.938v1zm1.875 0h-.938v-1h.938v1zm1.875 0h-.938v-1h.938v1zm.937 0v-.5H15v-.469h.031V15h.469v.031h.5V16h-.969z"/></svg>
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
         <div id="tile-map-tab" hidden="hidden">
           <canvas id="tile-map-paint" width="256" height="256" draggable="false"></canvas>
@@ -7815,16 +8508,13 @@ label.room-picker-toggle > svg {
                 <input type="radio" name="room-paint-tool" value="tile" title="draw tiles"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg>
               </label>
               <label>
-                <input type="radio" name="room-paint-tool" value="high" title="draw highlights"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M7.657 6.247c.11-.33.576-.33.686 0l.645 1.937a2.89 2.89 0 0 0 1.829 1.828l1.936.645c.33.11.33.576 0 .686l-1.937.645a2.89 2.89 0 0 0-1.828 1.829l-.645 1.936a.361.361 0 0 1-.686 0l-.645-1.937a2.89 2.89 0 0 0-1.828-1.828l-1.937-.645a.361.361 0 0 1 0-.686l1.937-.645a2.89 2.89 0 0 0 1.828-1.828l.645-1.937zM3.794 1.148a.217.217 0 0 1 .412 0l.387 1.162c.173.518.579.924 1.097 1.097l1.162.387a.217.217 0 0 1 0 .412l-1.162.387A1.734 1.734 0 0 0 4.593 5.69l-.387 1.162a.217.217 0 0 1-.412 0L3.407 5.69A1.734 1.734 0 0 0 2.31 4.593l-1.162-.387a.217.217 0 0 1 0-.412l1.162-.387A1.734 1.734 0 0 0 3.407 2.31l.387-1.162zM10.863.099a.145.145 0 0 1 .274 0l.258.774c.115.346.386.617.732.732l.774.258a.145.145 0 0 1 0 .274l-.774.258a1.156 1.156 0 0 0-.732.732l-.258.774a.145.145 0 0 1-.274 0l-.258-.774a1.156 1.156 0 0 0-.732-.732L9.1 2.137a.145.145 0 0 1 0-.274l.774-.258c.346-.115.617-.386.732-.732L10.863.1z"/></svg>
-              </label>
-              <label>
-                <input type="radio" name="room-paint-tool" value="pick" title="pick tile"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.354.646a1.207 1.207 0 0 0-1.708 0L8.5 3.793l-.646-.647a.5.5 0 1 0-.708.708L8.293 5l-7.147 7.146A.5.5 0 0 0 1 12.5v1.793l-.854.853a.5.5 0 1 0 .708.707L1.707 15H3.5a.5.5 0 0 0 .354-.146L11 7.707l1.146 1.147a.5.5 0 0 0 .708-.708l-.647-.646 3.147-3.146a1.207 1.207 0 0 0 0-1.708l-2-2zM2 12.707l7-7L10.293 7l-7 7H2v-1.293z"/></svg>
-              </label>
-              <label>
                 <input type="radio" name="room-paint-tool" value="wall" title="draw walls"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M0 .5A.5.5 0 0 1 .5 0h15a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5H14v2h1.5a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5H14v2h1.5a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5H.5a.5.5 0 0 1-.5-.5v-3a.5.5 0 0 1 .5-.5H2v-2H.5a.5.5 0 0 1-.5-.5v-3A.5.5 0 0 1 .5 6H2V4H.5a.5.5 0 0 1-.5-.5v-3zM3 4v2h4.5V4H3zm5.5 0v2H13V4H8.5zM3 10v2h4.5v-2H3zm5.5 0v2H13v-2H8.5zM1 1v2h3.5V1H1zm4.5 0v2h5V1h-5zm6 0v2H15V1h-3.5zM1 7v2h3.5V7H1zm4.5 0v2h5V7h-5zm6 0v2H15V7h-3.5zM1 13v2h3.5v-2H1zm4.5 0v2h5v-2h-5zm6 0v2H15v-2h-3.5z"/></svg>
               </label>
               <label>
                 <input type="radio" name="room-paint-tool" value="events" title="edit events"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M1.5 1a.5.5 0 0 0-.5.5v3a.5.5 0 0 1-1 0v-3A1.5 1.5 0 0 1 1.5 0h3a.5.5 0 0 1 0 1h-3zM11 .5a.5.5 0 0 1 .5-.5h3A1.5 1.5 0 0 1 16 1.5v3a.5.5 0 0 1-1 0v-3a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 1-.5-.5zM.5 11a.5.5 0 0 1 .5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 1 0 1h-3A1.5 1.5 0 0 1 0 14.5v-3a.5.5 0 0 1 .5-.5zm15 0a.5.5 0 0 1 .5.5v3a1.5 1.5 0 0 1-1.5 1.5h-3a.5.5 0 0 1 0-1h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 1 .5-.5z"/><path d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1H3zm8-9a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/></svg>
+              </label>
+              <label>
+                <input type="radio" name="room-paint-tool" value="color" title="edit colors"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm4 3a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM5.5 7a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm.5 6a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/><path d="M16 8c0 3.15-1.866 2.585-3.567 2.07C11.42 9.763 10.465 9.473 10 10c-.603.683-.475 1.819-.351 2.92C9.826 14.495 9.996 16 8 16a8 8 0 1 1 8-8zm-8 7c.611 0 .654-.171.655-.176.078-.146.124-.464.07-1.119-.014-.168-.037-.37-.061-.591-.052-.464-.112-1.005-.118-1.462-.01-.707.083-1.61.704-2.314.369-.417.845-.578 1.272-.618.404-.038.812.026 1.16.104.343.077.702.186 1.025.284l.028.008c.346.105.658.199.953.266.653.148.904.083.991.024C14.717 9.38 15 9.161 15 8a7 7 0 1 0-7 7z"/></svg>
               </label>
               <label>
                 <input type="radio" name="room-paint-tool" value="shift" title="shift tiles"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M7.646.146a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1-.708.708L8.5 1.707V5.5a.5.5 0 0 1-1 0V1.707L6.354 2.854a.5.5 0 1 1-.708-.708l2-2zM8 10a.5.5 0 0 1 .5.5v3.793l1.146-1.147a.5.5 0 0 1 .708.708l-2 2a.5.5 0 0 1-.708 0l-2-2a.5.5 0 0 1 .708-.708L7.5 14.293V10.5A.5.5 0 0 1 8 10zM.146 8.354a.5.5 0 0 1 0-.708l2-2a.5.5 0 1 1 .708.708L1.707 7.5H5.5a.5.5 0 0 1 0 1H1.707l1.147 1.146a.5.5 0 0 1-.708.708l-2-2zM10 8a.5.5 0 0 1 .5-.5h3.793l-1.147-1.146a.5.5 0 0 1 .708-.708l2 2a.5.5 0 0 1 0 .708l-2 2a.5.5 0 0 1-.708-.708L14.293 8.5H10.5A.5.5 0 0 1 10 8z"/></svg>
@@ -7832,13 +8522,6 @@ label.room-picker-toggle > svg {
             </div>
             <label class="toggle" id="tile-grid">
               <input type="checkbox" name="room-grid" title="toggle grid"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-border" viewBox="0 0 16 16"><path d="M0 0h.969v.5H1v.469H.969V1H.5V.969H0V0zm2.844 1h-.938V0h.938v1zm1.875 0H3.78V0h.938v1zm1.875 0h-.938V0h.938v1zm.937 0V.969H7.5V.5h.031V0h.938v.5H8.5v.469h-.031V1H7.53zm2.813 0h-.938V0h.938v1zm1.875 0h-.938V0h.938v1zm1.875 0h-.938V0h.938v1zM15.5 1h-.469V.969H15V.5h.031V0H16v.969h-.5V1zM1 1.906v.938H0v-.938h1zm6.5.938v-.938h1v.938h-1zm7.5 0v-.938h1v.938h-1zM1 3.78v.938H0V3.78h1zm6.5.938V3.78h1v.938h-1zm7.5 0V3.78h1v.938h-1zM1 5.656v.938H0v-.938h1zm6.5.938v-.938h1v.938h-1zm7.5 0v-.938h1v.938h-1zM.969 8.5H.5v-.031H0V7.53h.5V7.5h.469v.031H1v.938H.969V8.5zm1.875 0h-.938v-1h.938v1zm1.875 0H3.78v-1h.938v1zm1.875 0h-.938v-1h.938v1zm1.875-.031V8.5H7.53v-.031H7.5V7.53h.031V7.5h.938v.031H8.5v.938h-.031zm1.875.031h-.938v-1h.938v1zm1.875 0h-.938v-1h.938v1zm1.875 0h-.938v-1h.938v1zm1.406 0h-.469v-.031H15V7.53h.031V7.5h.469v.031h.5v.938h-.5V8.5zM0 10.344v-.938h1v.938H0zm7.5 0v-.938h1v.938h-1zm8.5-.938v.938h-1v-.938h1zM0 12.22v-.938h1v.938H0zm7.5 0v-.938h1v.938h-1zm8.5-.938v.938h-1v-.938h1zM0 14.094v-.938h1v.938H0zm7.5 0v-.938h1v.938h-1zm8.5-.938v.938h-1v-.938h1zM.969 16H0v-.969h.5V15h.469v.031H1v.469H.969v.5zm1.875 0h-.938v-1h.938v1zm1.875 0H3.78v-1h.938v1zm1.875 0h-.938v-1h.938v1zm.937 0v-.5H7.5v-.469h.031V15h.938v.031H8.5v.469h-.031v.5H7.53zm2.813 0h-.938v-1h.938v1zm1.875 0h-.938v-1h.938v1zm1.875 0h-.938v-1h.938v1zm.937 0v-.5H15v-.469h.031V15h.469v.031h.5V16h-.969z"/></svg>
-            </label>
-          </div>
-        </div>
-        <div id="palette-picker" hidden="hidden">
-          <div class="column radio-select" id="palette-picker-palettes" title="select palette">
-            <label id="palette-picker-template" hidden="hidden">
-              <input type="radio" name="palette-picker-select" value="undefined,undefined" title="select palette undefined"/>
             </label>
           </div>
         </div>
@@ -7861,210 +8544,129 @@ label.room-picker-toggle > svg {
             </template>
           </div>
         </div>
+        <div id="palette-select-window" hidden="hidden">
+          <div class="item-management-buttons">
+            <button name="add-new-palette" title="add new palette"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg></button>
+            <button name="duplicate-palette" title="duplicate selected palette"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13 0H6a2 2 0 0 0-2 2 2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2 2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm0 13V4a2 2 0 0 0-2-2H5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1zM3 4a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4z"/></svg></button>
+            <button name="reorder-palette-before" title="reorder palette before"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/></svg></button>
+            <button name="reorder-palette-after" title="reorder palette after"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/></svg></button>
+            <button name="delete-palette" title="delete selected palette"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
+          </div>
+          <div class="item-select palette-select radio-select" id="palette-select" title="select palette">
+            <template id="palette-select-window-template">
+              <label>
+                <input type="radio" name="palette-select" value="0" title="select palette 0"/>
+                <canvas width="3" height="1"></canvas>
+              </label>
+            </template>
+          </div>
+        </div>
+        <div class="tile-paint-buttons" id="frame-adjust-window" hidden="hidden">
+          <div class="grid3">
+            <button name="rotate-tile-anticlockwise" title="rotate tile anticlockwise"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1.146 4.854a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 4H12.5A2.5 2.5 0 0 1 15 6.5v8a.5.5 0 0 1-1 0v-8A1.5 1.5 0 0 0 12.5 5H2.707l3.147 3.146a.5.5 0 1 1-.708.708l-4-4z"/></svg></button>
+            <button name="shift-tile-up" title="shift tile up"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 15a.5.5 0 0 0 .5-.5V2.707l3.146 3.147a.5.5 0 0 0 .708-.708l-4-4a.5.5 0 0 0-.708 0l-4 4a.5.5 0 1 0 .708.708L7.5 2.707V14.5a.5.5 0 0 0 .5.5z"/></svg></button>
+            <button name="rotate-tile-clockwise" title="rotate tile clockwise"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-90deg-right" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M14.854 4.854a.5.5 0 0 0 0-.708l-4-4a.5.5 0 0 0-.708.708L13.293 4H3.5A2.5 2.5 0 0 0 1 6.5v8a.5.5 0 0 0 1 0v-8A1.5 1.5 0 0 1 3.5 5h9.793l-3.147 3.146a.5.5 0 0 0 .708.708l4-4z"/></svg></button>
+            <button name="shift-tile-left" title="shift tile left"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/></svg></button>
+            <button name="shift-tile-down" title="shift tile down"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z"/></svg></button>
+            <button name="shift-tile-right" title="shift tile right"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/></svg></button>
+          </div>
+          <div class="horizontal-capsule">
+            <button name="mirror-tile" title="mirror tile"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M7 2.5a.5.5 0 0 0-.939-.24l-6 11A.5.5 0 0 0 .5 14h6a.5.5 0 0 0 .5-.5v-11zm2.376-.484a.5.5 0 0 1 .563.245l6 11A.5.5 0 0 1 15.5 14h-6a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .376-.484zM10 4.46V13h4.658L10 4.46z"/></svg></button>
+            <button name="flip-tile" title="flip tile"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.5 7a.5.5 0 0 0 .24-.939l-11-6A.5.5 0 0 0 2 .5v6a.5.5 0 0 0 .5.5h11zm.485 2.376a.5.5 0 0 1-.246.563l-11 6A.5.5 0 0 1 2 15.5v-6a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .485.376zM11.539 10H3v4.658L11.54 10z"/></svg></button>
+            <button name="invert-tile" title="invert tile"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M9.05.435c-.58-.58-1.52-.58-2.1 0L.436 6.95c-.58.58-.58 1.519 0 2.098l6.516 6.516c.58.58 1.519.58 2.098 0l6.516-6.516c.58-.58.58-1.519 0-2.098L9.05.435zM8 .989c.127 0 .253.049.35.145l6.516 6.516a.495.495 0 0 1 0 .7L8.35 14.866a.493.493 0 0 1-.35.145V.989z"/></svg></button>
+          </div>
+          <div class="horizontal-capsule">
+            <button name="copy-tile-frame" title="copy frame"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13 0H6a2 2 0 0 0-2 2 2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2 2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm0 13V4a2 2 0 0 0-2-2H5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1zM3 4a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4z"/></svg></button>
+            <button name="paste-tile-frame" title="paste frame"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 11a1 1 0 1 1 2 0v1a1 1 0 1 1-2 0v-1zm6-4a1 1 0 1 1 2 0v5a1 1 0 1 1-2 0V7zM7 9a1 1 0 0 1 2 0v3a1 1 0 1 1-2 0V9z"/><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg></button>
+            <button name="clear-tile-frame" title="clear frame"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
+          </div>
+        </div>
         <div id="upper-toolbar">
           <div class="horizontal-capsule radio-select" id="mode-select" title="mode-select">
             <label>
-              <input type="radio" name="mode-select" value="playtest" title="playtest" autocomplete="off"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M10.804 8 5 4.633v6.734L10.804 8zm.792-.696a.802.802 0 0 1 0 1.392l-6.363 3.692C4.713 12.69 4 12.345 4 11.692V4.308c0-.653.713-.998 1.233-.696l6.363 3.692z"/></svg>
+              <input type="radio" name="mode-select" value="info" title="info"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-question-lg" viewBox="0 0 16 16">
+  <path fill-rule="evenodd" d="M4.475 5.458c-.284 0-.514-.237-.47-.517C4.28 3.24 5.576 2 7.825 2c2.25 0 3.767 1.36 3.767 3.215 0 1.344-.665 2.288-1.79 2.973-1.1.659-1.414 1.118-1.414 2.01v.03a.5.5 0 0 1-.5.5h-.77a.5.5 0 0 1-.5-.495l-.003-.2c-.043-1.221.477-2.001 1.645-2.712 1.03-.632 1.397-1.135 1.397-2.028 0-.979-.758-1.698-1.926-1.698-1.009 0-1.71.529-1.938 1.402-.066.254-.278.461-.54.461h-.777ZM7.496 14c.622 0 1.095-.474 1.095-1.09 0-.618-.473-1.092-1.095-1.092-.606 0-1.087.474-1.087 1.091S6.89 14 7.496 14Z"/>
+</svg>
             </label>
             <label>
-              <input type="radio" name="mode-select" value="palettes" title="edit palettes"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm4 3a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM5.5 7a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm.5 6a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/><path d="M16 8c0 3.15-1.866 2.585-3.567 2.07C11.42 9.763 10.465 9.473 10 10c-.603.683-.475 1.819-.351 2.92C9.826 14.495 9.996 16 8 16a8 8 0 1 1 8-8zm-8 7c.611 0 .654-.171.655-.176.078-.146.124-.464.07-1.119-.014-.168-.037-.37-.061-.591-.052-.464-.112-1.005-.118-1.462-.01-.707.083-1.61.704-2.314.369-.417.845-.578 1.272-.618.404-.038.812.026 1.16.104.343.077.702.186 1.025.284l.028.008c.346.105.658.199.953.266.653.148.904.083.991.024C14.717 9.38 15 9.161 15 8a7 7 0 1 0-7 7z"/></svg>
+              <input type="radio" name="mode-select" value="draw-room" title="edit rooms"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg>
             </label>
             <label>
-              <input type="radio" name="mode-select" value="draw-tiles" title="edit tiles"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg>
-            </label>
-            <label>
-              <input type="radio" name="mode-select" value="draw-room" title="edit rooms"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M0 1.5A1.5 1.5 0 0 1 1.5 0h13A1.5 1.5 0 0 1 16 1.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 0 14.5v-13zM1.5 1a.5.5 0 0 0-.5.5V5h4V1H1.5zM5 6H1v4h4V6zm1 4h4V6H6v4zm-1 1H1v3.5a.5.5 0 0 0 .5.5H5v-4zm1 0v4h4v-4H6zm5 0v4h3.5a.5.5 0 0 0 .5-.5V11h-4zm0-1h4V6h-4v4zm0-5h4V1.5a.5.5 0 0 0-.5-.5H11v4zm-1 0V1H6v4h4z"/></svg>
+              <input type="radio" name="mode-select" value="playtest" title="playtest"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M10.804 8 5 4.633v6.734L10.804 8zm.792-.696a.802.802 0 0 1 0 1.392l-6.363 3.692C4.713 12.69 4 12.345 4 11.692V4.308c0-.653.713-.998 1.233-.696l6.363 3.692z"/></svg>
             </label>
           </div>
           <div class="button-row" id="undo-row">
             <button name="undo" title="undo"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466z"/></svg></button>
             <button name="redo" title="redo"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg></button>
-            <button name="save" title="save"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-disc" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M10 8a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM8 4a4 4 0 0 0-4 4 .5.5 0 0 1-1 0 5 5 0 0 1 5-5 .5.5 0 0 1 0 1zm4.5 3.5a.5.5 0 0 1 .5.5 5 5 0 0 1-5 5 .5.5 0 0 1 0-1 4 4 0 0 0 4-4 .5.5 0 0 1 .5-.5z"/></svg></button>
+            <button name="save" title="save to browser"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-disc" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M10 8a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM8 4a4 4 0 0 0-4 4 .5.5 0 0 1-1 0 5 5 0 0 1 5-5 .5.5 0 0 1 0 1zm4.5 3.5a.5.5 0 0 1 .5.5 5 5 0 0 1-5 5 .5.5 0 0 1 0-1 4 4 0 0 0 4-4 .5.5 0 0 1 .5-.5z"/></svg></button>
           </div>
+        </div>
+        <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
+          <h2>binksi -- 0.5-alpha (2022/02/20)</h2>
+          <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
+          <p>to get started, use <a href="https://github.com/smwhr/binksi">the binksi repo</a> as a template</p>
+          <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
+          <h3>guides</h3>
+          <div class="info-action-list"><a class="button" href="https://kool.tools/bipsi/user-guide.pdf" target="_blank" title="open user guide">
+               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-question-lg" viewBox="0 0 16 16">
+  <path fill-rule="evenodd" d="M4.475 5.458c-.284 0-.514-.237-.47-.517C4.28 3.24 5.576 2 7.825 2c2.25 0 3.767 1.36 3.767 3.215 0 1.344-.665 2.288-1.79 2.973-1.1.659-1.414 1.118-1.414 2.01v.03a.5.5 0 0 1-.5.5h-.77a.5.5 0 0 1-.5-.495l-.003-.2c-.043-1.221.477-2.001 1.645-2.712 1.03-.632 1.397-1.135 1.397-2.028 0-.979-.758-1.698-1.926-1.698-1.009 0-1.71.529-1.938 1.402-.066.254-.278.461-.54.461h-.777ZM7.496 14c.622 0 1.095-.474 1.095-1.09 0-.618-.473-1.092-1.095-1.092-.606 0-1.087.474-1.087 1.091S6.89 14 7.496 14Z"/>
+</svg>binksi user guide</a><a class="button" href="https://github.com/inkle/ink/blob/master/Documentation/WritingWithInk.md" target="_blank" title="writing with Ink">
+               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-braces" viewBox="0 0 16 16"><path d="M2.114 8.063V7.9c1.005-.102 1.497-.615 1.497-1.6V4.503c0-1.094.39-1.538 1.354-1.538h.273V2h-.376C3.25 2 2.49 2.759 2.49 4.352v1.524c0 1.094-.376 1.456-1.49 1.456v1.299c1.114 0 1.49.362 1.49 1.456v1.524c0 1.593.759 2.352 2.372 2.352h.376v-.964h-.273c-.964 0-1.354-.444-1.354-1.538V9.663c0-.984-.492-1.497-1.497-1.6zM13.886 7.9v.163c-1.005.103-1.497.616-1.497 1.6v1.798c0 1.094-.39 1.538-1.354 1.538h-.273v.964h.376c1.613 0 2.372-.759 2.372-2.352v-1.524c0-1.094.376-1.456 1.49-1.456V7.332c-1.114 0-1.49-.362-1.49-1.456V4.352C13.51 2.759 12.75 2 11.138 2h-.376v.964h.273c.964 0 1.354.444 1.354 1.538V6.3c0 .984.492 1.497 1.497 1.6z"/></svg>writing with Ink</a></div>
+          <div class="info-action-list"><a class="button" href="https://kool.tools/bipsi/user-guide.pdf" target="_blank" title="open user guide">
+               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-question-lg" viewBox="0 0 16 16">
+  <path fill-rule="evenodd" d="M4.475 5.458c-.284 0-.514-.237-.47-.517C4.28 3.24 5.576 2 7.825 2c2.25 0 3.767 1.36 3.767 3.215 0 1.344-.665 2.288-1.79 2.973-1.1.659-1.414 1.118-1.414 2.01v.03a.5.5 0 0 1-.5.5h-.77a.5.5 0 0 1-.5-.495l-.003-.2c-.043-1.221.477-2.001 1.645-2.712 1.03-.632 1.397-1.135 1.397-2.028 0-.979-.758-1.698-1.926-1.698-1.009 0-1.71.529-1.938 1.402-.066.254-.278.461-.54.461h-.777ZM7.496 14c.622 0 1.095-.474 1.095-1.09 0-.618-.473-1.092-1.095-1.092-.606 0-1.087.474-1.087 1.091S6.89 14 7.496 14Z"/>
+</svg>bipsi user guide</a><a class="button" href="https://kool.tools/bipsi/scripting-guide.pdf" target="_blank" title="open scripting guide">
+               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-braces" viewBox="0 0 16 16"><path d="M2.114 8.063V7.9c1.005-.102 1.497-.615 1.497-1.6V4.503c0-1.094.39-1.538 1.354-1.538h.273V2h-.376C3.25 2 2.49 2.759 2.49 4.352v1.524c0 1.094-.376 1.456-1.49 1.456v1.299c1.114 0 1.49.362 1.49 1.456v1.524c0 1.593.759 2.352 2.372 2.352h.376v-.964h-.273c-.964 0-1.354-.444-1.354-1.538V9.663c0-.984-.492-1.497-1.497-1.6zM13.886 7.9v.163c-1.005.103-1.497.616-1.497 1.6v1.798c0 1.094-.39 1.538-1.354 1.538h-.273v.964h.376c1.613 0 2.372-.759 2.372-2.352v-1.524c0-1.094.376-1.456 1.49-1.456V7.332c-1.114 0-1.49-.362-1.49-1.456V4.352C13.51 2.759 12.75 2 11.138 2h-.376v.964h.273c.964 0 1.354.444 1.354 1.538V6.3c0 .984.492 1.497 1.497 1.6z"/></svg>bipsi scripting guide</a></div>
         </div>
         <div class="controls-tab-body" id="play-tab-body" hidden="hidden">
-          <div>
-            <p>
-              <div class="button-row">
-                <h3>Import</h3>
-                <button name="import_html" title="import from webpage" data-original-only="data-original-only">html</button>
-                <button name="import_bipsi" title="import a bipsi" data-original-only="data-original-only">bipsi bundle</button>
-                <button name="import_story" title="import an ink story" data-original-only="data-original-only">ink story</button>
-              </div>
-            </p>
-            <p>
-              <div class="button-row">
-                <h3>Export </h3>
-                <button name="export" title="export as webpage">release as html</button>
-                <button name="export_json" title="export as json">bipsi bundle</button>
-              </div>
-            </p>
-            <p>
-              <div class="button-row">
-                <h3>Extra </h3>
-                <button name="update" title="open this flickgame study in the latest version" data-remix-only="data-remix-only">update</button>
-                <button name="reset" title="reset project to default">reset to default</button>
-              </div>
-            </p>
-            <h2>binksi -- 0.4-alpha (2022/1/17)</h2>
-            <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
-            <p>
-              quick links to : <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi user guide</a>,  <a href="https://kool.tools/bipsi/scripting-guide.pdf">bipsi scripting guide</a>,
-<a href="https://github.com/inkle/ink/blob/master/Documentation/WritingWithInk.md">writing with Ink</a> and <a href="https://smwhr.github.io/binksi/docs">binksi user guide</a>
-            </p>
-            <p>to get started, use <a href="https://github.com/smwhr/binksi">the binksi repo</a> as a template</p>
-            <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
+          <h2>playtest & publish</h2>
+          <h3>switch project</h3>
+          <div class="info-action-list">
+            <button name="import_html" title="import from webpage">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-arrow-up" viewBox="0 0 16 16">
+  <path d="M8.5 11.5a.5.5 0 0 1-1 0V7.707L6.354 8.854a.5.5 0 1 1-.708-.708l2-2a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1-.708.708L8.5 7.707V11.5z"/>
+  <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2zM9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5v2z"/>
+</svg>import binksi game
+            </button>
+            <button name="import_bipsi" title="import from bipsi">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-arrow-up" viewBox="0 0 16 16">
+  <path d="M8.5 11.5a.5.5 0 0 1-1 0V7.707L6.354 8.854a.5.5 0 1 1-.708-.708l2-2a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1-.708.708L8.5 7.707V11.5z"/>
+  <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2zM9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5v2z"/>
+</svg>import bipsi
+            </button>
           </div>
-        </div>
-        <div class="controls-tab" id="edit-colors-tab" hidden="hidden">
-          <div class="controls-tab-body">
-            <div class="row" id="palette-edit">
-              <div class="column radio-select" id="color-select" title="select palette">
-                <div class="horizontal-capsule">
-                  <label>
-                    <input type="radio" name="color-select" value="0,0" title="select palette 0, color 0"/>
-                  </label>
-                  <label>
-                    <input type="radio" name="color-select" value="0,1" title="select palette 0, color 1"/>
-                  </label>
-                  <label>
-                    <input type="radio" name="color-select" value="0,2" title="select palette 0, color 2"/>
-                  </label>
-                </div>
-                <div class="horizontal-capsule">
-                  <label>
-                    <input type="radio" name="color-select" value="1,0" title="select palette 1, color 0"/>
-                  </label>
-                  <label>
-                    <input type="radio" name="color-select" value="1,1" title="select palette 1, color 1"/>
-                  </label>
-                  <label>
-                    <input type="radio" name="color-select" value="1,2" title="select palette 1, color 2"/>
-                  </label>
-                </div>
-                <div class="horizontal-capsule">
-                  <label>
-                    <input type="radio" name="color-select" value="2,0" title="select palette 2, color 0"/>
-                  </label>
-                  <label>
-                    <input type="radio" name="color-select" value="2,1" title="select palette 2, color 1"/>
-                  </label>
-                  <label>
-                    <input type="radio" name="color-select" value="2,2" title="select palette 2, color 2"/>
-                  </label>
-                </div>
-                <div class="horizontal-capsule">
-                  <label>
-                    <input type="radio" name="color-select" value="3,0" title="select palette 3, color 0"/>
-                  </label>
-                  <label>
-                    <input type="radio" name="color-select" value="3,1" title="select palette 3, color 1"/>
-                  </label>
-                  <label>
-                    <input type="radio" name="color-select" value="3,2" title="select palette 3, color 2"/>
-                  </label>
-                </div>
-                <div class="horizontal-capsule">
-                  <label>
-                    <input type="radio" name="color-select" value="4,0" title="select palette 4, color 0"/>
-                  </label>
-                  <label>
-                    <input type="radio" name="color-select" value="4,1" title="select palette 4, color 1"/>
-                  </label>
-                  <label>
-                    <input type="radio" name="color-select" value="4,2" title="select palette 4, color 2"/>
-                  </label>
-                </div>
-                <div class="horizontal-capsule">
-                  <label>
-                    <input type="radio" name="color-select" value="5,0" title="select palette 5, color 0"/>
-                  </label>
-                  <label>
-                    <input type="radio" name="color-select" value="5,1" title="select palette 5, color 1"/>
-                  </label>
-                  <label>
-                    <input type="radio" name="color-select" value="5,2" title="select palette 5, color 2"/>
-                  </label>
-                </div>
-                <div class="horizontal-capsule">
-                  <label>
-                    <input type="radio" name="color-select" value="6,0" title="select palette 6, color 0"/>
-                  </label>
-                  <label>
-                    <input type="radio" name="color-select" value="6,1" title="select palette 6, color 1"/>
-                  </label>
-                  <label>
-                    <input type="radio" name="color-select" value="6,2" title="select palette 6, color 2"/>
-                  </label>
-                </div>
-                <div class="horizontal-capsule">
-                  <label>
-                    <input type="radio" name="color-select" value="7,0" title="select palette 7, color 0"/>
-                  </label>
-                  <label>
-                    <input type="radio" name="color-select" value="7,1" title="select palette 7, color 1"/>
-                  </label>
-                  <label>
-                    <input type="radio" name="color-select" value="7,2" title="select palette 7, color 2"/>
-                  </label>
-                </div>
-              </div>
-              <div class="column" id="color-edit">
-                <canvas id="color-huesat" width="216" height="216"></canvas>
-                <input name="color-value" type="range" min="0" max="1" step=".01"/>
-                <div class="button-row">
-                  <input name="color-hex" type="text" value="#ffffff"/>
-                </div>
-              </div>
-            </div>
+          <div class="info-action-list">
+            <button name="import_story" title="import ink story">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-arrow-up" viewBox="0 0 16 16">
+  <path d="M8.5 11.5a.5.5 0 0 1-1 0V7.707L6.354 8.854a.5.5 0 1 1-.708-.708l2-2a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1-.708.708L8.5 7.707V11.5z"/>
+  <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2zM9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5v2z"/>
+</svg>import ink story
+            </button>
+            <button name="reset" title="reset project to default">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>reset project</button>
           </div>
-          <div class="viewport-toolbar">
-            <label class="toggle picker-toggle room-picker-toggle">
-              <input type="checkbox" name="show-room-window" title="switch room"/>
-              <canvas width="16" height="16"></canvas><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-caret-up-fill" viewBox="0 0 16 16"><path d="m7.247 4.86-4.796 5.481c-.566.647-.106 1.659.753 1.659h9.592a1 1 0 0 0 .753-1.659l-4.796-5.48a1 1 0 0 0-1.506 0z"/></svg>
-            </label>
+          <h3>publish project</h3>
+          <div class="info-action-list">
+            <button name="export" title="export as webpage">
+               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-box-seam" viewBox="0 0 16 16">
+  <path d="M8.186 1.113a.5.5 0 0 0-.372 0L1.846 3.5l2.404.961L10.404 2l-2.218-.887zm3.564 1.426L5.596 5 8 5.961 14.154 3.5l-2.404-.961zm3.25 1.7-6.5 2.6v7.922l6.5-2.6V4.24zM7.5 14.762V6.838L1 4.239v7.923l6.5 2.6zM7.443.184a1.5 1.5 0 0 1 1.114 0l7.129 2.852A.5.5 0 0 1 16 3.5v8.662a1 1 0 0 1-.629.928l-7.185 2.874a.5.5 0 0 1-.372 0L.63 13.09a1 1 0 0 1-.63-.928V3.5a.5.5 0 0 1 .314-.464L7.443.184z"/>
+</svg>export playable
+            </button>
           </div>
-        </div>
-        <div class="controls-tab" id="tile-select-tab" hidden="hidden">
-          <div class="controls-tab-body">
-            <div class="tile-select radio-select" id="tile-select" title="select tiles">
-              <template id="tile-select-template">
-                <label>
-                  <input type="radio" name="tile-select"/>
-                </label>
-              </template>
-            </div>
-            <div class="item-management-buttons">
-              <button name="add-new-tile" title="add new tile"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg></button>
-              <button name="duplicate-tile" title="duplicate selected tile"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13 0H6a2 2 0 0 0-2 2 2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2 2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm0 13V4a2 2 0 0 0-2-2H5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1zM3 4a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4z"/></svg></button>
-              <button name="reorder-tile-before" title="reorder tile before"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/></svg></button>
-              <button name="reorder-tile-after" title="reorder tile after"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/></svg></button>
-              <button name="delete-tile" title="delete selected tile"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
-            </div>
-          </div>
-          <div class="viewport-toolbar">
-            <label class="toggle picker-toggle room-picker-toggle">
-              <input type="checkbox" name="show-room-window" title="switch room"/>
-              <canvas width="16" height="16"></canvas><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-caret-up-fill" viewBox="0 0 16 16"><path d="m7.247 4.86-4.796 5.481c-.566.647-.106 1.659.753 1.659h9.592a1 1 0 0 0 .753-1.659l-4.796-5.48a1 1 0 0 0-1.506 0z"/></svg>
-            </label>
+          <h3>extra</h3>
+          <div class="info-action-list">
+            <button name="export-gamedata" title="export data">
+               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-binary" viewBox="0 0 16 16">
+  <path d="M7.05 11.885c0 1.415-.548 2.206-1.524 2.206C4.548 14.09 4 13.3 4 11.885c0-1.412.548-2.203 1.526-2.203.976 0 1.524.79 1.524 2.203zm-1.524-1.612c-.542 0-.832.563-.832 1.612 0 .088.003.173.006.252l1.559-1.143c-.126-.474-.375-.72-.733-.72zm-.732 2.508c.126.472.372.718.732.718.54 0 .83-.563.83-1.614 0-.085-.003-.17-.006-.25l-1.556 1.146zm6.061.624V14h-3v-.595h1.181V10.5h-.05l-1.136.747v-.688l1.19-.786h.69v3.633h1.125z"/>
+  <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2zM9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5v2z"/>
+</svg>bipsi bundle
+            </button>
+            <button name="export-tileset" title="export tile graphics">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg>export tile graphics</button>
           </div>
         </div>
         <div class="controls-tab" id="draw-room-tab-controls" hidden="hidden">
           <div class="controls-tab-body">
-            <div class="tile-select radio-select" id="draw-room-tile-select" title="select tile">
-              <template id="draw-room-tile-template">
-                <label>
-                  <input type="radio" name="draw-room-tile-select"/>
-                </label>
-              </template>
-            </div>
-            <div class="item-management-buttons" id="draw-room-tile-manage" hidden="hidden">
-              <button name="add-new-tile" title="add new tile"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg></button>
-              <button name="duplicate-tile" title="duplicate selected tile"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13 0H6a2 2 0 0 0-2 2 2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2 2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm0 13V4a2 2 0 0 0-2-2H5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1zM3 4a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4z"/></svg></button>
-              <button name="reorder-tile-before" title="reorder tile before"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/></svg></button>
-              <button name="reorder-tile-after" title="reorder tile after"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/></svg></button>
-              <button name="delete-tile" title="delete selected tile"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
-            </div>
             <div id="draw-room-events-controls" hidden="hidden">
               <div id="event-empty" hidden="hidden">
                 <h2>create event from template:</h2>
@@ -8087,6 +8689,15 @@ label.room-picker-toggle > svg {
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-person-circle" viewBox="0 0 16 16"><path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/><path fill-rule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1z"/></svg>player avatar</button>
                   <button name="create-event-code">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-braces" viewBox="0 0 16 16"><path d="M2.114 8.063V7.9c1.005-.102 1.497-.615 1.497-1.6V4.503c0-1.094.39-1.538 1.354-1.538h.273V2h-.376C3.25 2 2.49 2.759 2.49 4.352v1.524c0 1.094-.376 1.456-1.49 1.456v1.299c1.114 0 1.49.362 1.49 1.456v1.524c0 1.593.759 2.352 2.372 2.352h.376v-.964h-.273c-.964 0-1.354-.444-1.354-1.538V9.663c0-.984-.492-1.497-1.497-1.6zM13.886 7.9v.163c-1.005.103-1.497.616-1.497 1.6v1.798c0 1.094-.39 1.538-1.354 1.538h-.273v.964h.376c1.613 0 2.372-.759 2.372-2.352v-1.524c0-1.094.376-1.456 1.49-1.456V7.332c-1.114 0-1.49-.362-1.49-1.456V4.352C13.51 2.759 12.75 2 11.138 2h-.376v.964h.273c.964 0 1.354.444 1.354 1.538V6.3c0 .984.492 1.497 1.497 1.6z"/></svg>custom code</button>
+                  <!--button(name="create-event-plugin")
+                  include /icons/cpu.svg
+                  | plugin
+                  -->
+                  <button name="create-event-plugin-file">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-cpu" viewBox="0 0 16 16">
+  <path d="M5 0a.5.5 0 0 1 .5.5V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2A2.5 2.5 0 0 1 14 4.5h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14a2.5 2.5 0 0 1-2.5 2.5v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14A2.5 2.5 0 0 1 2 11.5H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2A2.5 2.5 0 0 1 4.5 2V.5A.5.5 0 0 1 5 0zm-.5 3A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13h7a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 11.5 3h-7zM5 6.5A1.5 1.5 0 0 1 6.5 5h3A1.5 1.5 0 0 1 11 6.5v3A1.5 1.5 0 0 1 9.5 11h-3A1.5 1.5 0 0 1 5 9.5v-3zM6.5 6a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3z"/>
+</svg>import plugin
+                  </button>
                   <!--button(name="create-event-setup")
                   include /icons/play.svg
                   | setup
@@ -8186,27 +8797,107 @@ label.room-picker-toggle > svg {
                 </div>
               </div>
             </div>
+            <div id="draw-room-tile-controls" hidden="hidden">
+              <div class="row" id="tile-paint-row">
+                <canvas id="tile-paint-a" width="8" height="8" draggable="false" title="tile animation preview" hidden="hidden"></canvas>
+                <div class="radio-select" id="tile-paint-canvases">
+                  <label>
+                    <input type="radio" name="tile-paint-frame"/>
+                    <canvas id="tile-paint-0" width="160" height="160" draggable="false" title="edit tile frame 0"></canvas>
+                  </label>
+                  <label>
+                    <input type="radio" name="tile-paint-frame"/>
+                    <canvas id="tile-paint-1" width="160" height="160" draggable="false" title="edit tile frame 1"></canvas>
+                  </label>
+                </div>
+                <div class="column" id="frame-column">
+                  <label class="toggle">
+                    <input type="checkbox" name="tile-animated" title="toggle animated"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M10.804 8 5 4.633v6.734L10.804 8zm.792-.696a.802.802 0 0 1 0 1.392l-6.363 3.692C4.713 12.69 4 12.345 4 11.692V4.308c0-.653.713-.998 1.233-.696l6.363 3.692z"/></svg>
+                  </label>
+                  <button name="swap-tile-frames" title="swap frames"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1 11.5a.5.5 0 0 0 .5.5h11.793l-3.147 3.146a.5.5 0 0 0 .708.708l4-4a.5.5 0 0 0 0-.708l-4-4a.5.5 0 0 0-.708.708L13.293 11H1.5a.5.5 0 0 0-.5.5zm14-7a.5.5 0 0 1-.5.5H2.707l3.147 3.146a.5.5 0 1 1-.708.708l-4-4a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 4H14.5a.5.5 0 0 1 .5.5z"/></svg></button>
+                  <label class="toggle picker-toggle">
+                    <input type="checkbox" name="show-frame-adjust" title="adjust frame"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-tools" viewBox="0 0 16 16">
+  <path d="M1 0 0 1l2.2 3.081a1 1 0 0 0 .815.419h.07a1 1 0 0 1 .708.293l2.675 2.675-2.617 2.654A3.003 3.003 0 0 0 0 13a3 3 0 1 0 5.878-.851l2.654-2.617.968.968-.305.914a1 1 0 0 0 .242 1.023l3.356 3.356a1 1 0 0 0 1.414 0l1.586-1.586a1 1 0 0 0 0-1.414l-3.356-3.356a1 1 0 0 0-1.023-.242L10.5 9.5l-.96-.96 2.68-2.643A3.005 3.005 0 0 0 16 3c0-.269-.035-.53-.102-.777l-2.14 2.141L12 4l-.364-1.757L13.777.102a3 3 0 0 0-3.675 3.68L7.462 6.46 4.793 3.793a1 1 0 0 1-.293-.707v-.071a1 1 0 0 0-.419-.814L1 0zm9.646 10.646a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708zM3 11l.471.242.529.026.287.445.445.287.026.529L5 13l-.242.471-.026.529-.445.287-.287.445-.529.026L3 15l-.471-.242L2 14.732l-.287-.445L1.268 14l-.026-.529L1 13l.242-.471.026-.529.445-.287.287-.445.529-.026L3 11z"/>
+</svg><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-caret-up-fill" viewBox="0 0 16 16"><path d="m7.247 4.86-4.796 5.481c-.566.647-.106 1.659.753 1.659h9.592a1 1 0 0 0 .753-1.659l-4.796-5.48a1 1 0 0 0-1.506 0z"/></svg>
+                  </label>
+                  <label class="toggle" hidden="hidden">
+                    <input type="checkbox" name="tile-grid" title="toggle grid"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-border" viewBox="0 0 16 16"><path d="M0 0h.969v.5H1v.469H.969V1H.5V.969H0V0zm2.844 1h-.938V0h.938v1zm1.875 0H3.78V0h.938v1zm1.875 0h-.938V0h.938v1zm.937 0V.969H7.5V.5h.031V0h.938v.5H8.5v.469h-.031V1H7.53zm2.813 0h-.938V0h.938v1zm1.875 0h-.938V0h.938v1zm1.875 0h-.938V0h.938v1zM15.5 1h-.469V.969H15V.5h.031V0H16v.969h-.5V1zM1 1.906v.938H0v-.938h1zm6.5.938v-.938h1v.938h-1zm7.5 0v-.938h1v.938h-1zM1 3.78v.938H0V3.78h1zm6.5.938V3.78h1v.938h-1zm7.5 0V3.78h1v.938h-1zM1 5.656v.938H0v-.938h1zm6.5.938v-.938h1v.938h-1zm7.5 0v-.938h1v.938h-1zM.969 8.5H.5v-.031H0V7.53h.5V7.5h.469v.031H1v.938H.969V8.5zm1.875 0h-.938v-1h.938v1zm1.875 0H3.78v-1h.938v1zm1.875 0h-.938v-1h.938v1zm1.875-.031V8.5H7.53v-.031H7.5V7.53h.031V7.5h.938v.031H8.5v.938h-.031zm1.875.031h-.938v-1h.938v1zm1.875 0h-.938v-1h.938v1zm1.875 0h-.938v-1h.938v1zm1.406 0h-.469v-.031H15V7.53h.031V7.5h.469v.031h.5v.938h-.5V8.5zM0 10.344v-.938h1v.938H0zm7.5 0v-.938h1v.938h-1zm8.5-.938v.938h-1v-.938h1zM0 12.22v-.938h1v.938H0zm7.5 0v-.938h1v.938h-1zm8.5-.938v.938h-1v-.938h1zM0 14.094v-.938h1v.938H0zm7.5 0v-.938h1v.938h-1zm8.5-.938v.938h-1v-.938h1zM.969 16H0v-.969h.5V15h.469v.031H1v.469H.969v.5zm1.875 0h-.938v-1h.938v1zm1.875 0H3.78v-1h.938v1zm1.875 0h-.938v-1h.938v1zm.937 0v-.5H7.5v-.469h.031V15h.938v.031H8.5v.469h-.031v.5H7.53zm2.813 0h-.938v-1h.938v1zm1.875 0h-.938v-1h.938v1zm1.875 0h-.938v-1h.938v1zm.937 0v-.5H15v-.469h.031V15h.469v.031h.5V16h-.969z"/></svg>
+                  </label>
+                </div>
+              </div>
+              <div class="row" id="tile-select-row">
+                <div class="tile-select radio-select" id="tile-select" title="select tiles">
+                  <template id="tile-select-template">
+                    <label>
+                      <input type="radio" name="tile-select"/>
+                    </label>
+                  </template>
+                </div>
+                <div class="item-management-buttons column" id="tile-management">
+                  <button name="add-new-tile" title="add new tile"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg></button>
+                  <button name="duplicate-tile" title="duplicate selected tile"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13 0H6a2 2 0 0 0-2 2 2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2 2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm0 13V4a2 2 0 0 0-2-2H5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1zM3 4a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4z"/></svg></button>
+                  <button name="reorder-tile-before" title="reorder tile before"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/></svg></button>
+                  <button name="reorder-tile-after" title="reorder tile after"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/></svg></button>
+                  <button name="delete-tile" title="delete selected tile"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
+                </div>
+              </div>
+            </div>
+            <div id="draw-room-palette-controls" hidden="hidden">
+              <div class="column" id="palette-edit">
+                <canvas id="color-huesat" width="246" height="246"></canvas>
+                <input name="color-value" type="range" min="0" max="1" step=".01"/>
+                <div class="button-row">
+                  <input name="color-hex" type="text" value="#ffffff"/>
+                </div>
+                <div class="radio-select color-select horizontal-capsule" id="color-index-select">
+                  <label>
+                    <input type="radio" name="color-index" value="0" title="select palette color 0"/>
+                  </label>
+                  <label>
+                    <input type="radio" name="color-index" value="1" title="select palette color 1"/>
+                  </label>
+                  <label>
+                    <input type="radio" name="color-index" value="2" title="select palette color 2"/>
+                  </label>
+                </div>
+              </div>
+              <div class="color-select column radio-select" id="color-select" title="select palette">
+                <template id="color-select-template">
+                  <div class="horizontal-capsule">
+                    <label>
+                      <input type="radio" name="color-select" value="0,0" title="select palette 0, color 0"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="color-select" value="0,0" title="select palette 0, color 0"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="color-select" value="0,0" title="select palette 0, color 0"/>
+                    </label>
+                  </div>
+                </template>
+              </div>
+            </div>
           </div>
           <div class="viewport-toolbar">
-            <label class="toggle picker-toggle room-picker-toggle">
+            <label class="toggle picker-toggle">
               <input type="checkbox" name="show-room-window" title="switch room"/>
               <canvas width="16" height="16"></canvas><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-caret-up-fill" viewBox="0 0 16 16"><path d="m7.247 4.86-4.796 5.481c-.566.647-.106 1.659.753 1.659h9.592a1 1 0 0 0 .753-1.659l-4.796-5.48a1 1 0 0 0-1.506 0z"/></svg>
             </label>
-            <select id="room-palette-select" name="room-palette">
-              <option value="0">palette 0</option>
-              <option value="1">palette 1</option>
-              <option value="2">palette 2</option>
-              <option value="3">palette 3</option>
-              <option value="4">palette 4</option>
-              <option value="5">palette 5</option>
-              <option value="6">palette 6</option>
-              <option value="7">palette 7</option>
-            </select>
+            <label class="toggle picker-toggle palette-picker-toggle">
+              <input type="checkbox" name="show-palette-window" title="switch palette"/>
+              <canvas width="16" height="16"></canvas><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-caret-up-fill" viewBox="0 0 16 16"><path d="m7.247 4.86-4.796 5.481c-.566.647-.106 1.659.753 1.659h9.592a1 1 0 0 0 .753-1.659l-4.796-5.48a1 1 0 0 0-1.506 0z"/></svg>
+            </label>
             <div class="horizontal-capsule" id="room-events-toolbar" hidden="hidden">
               <button name="copy-event" title="copy event"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13 0H6a2 2 0 0 0-2 2 2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2 2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm0 13V4a2 2 0 0 0-2-2H5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1zM3 4a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4z"/></svg></button>
               <button name="paste-event" title="paste event"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 11a1 1 0 1 1 2 0v1a1 1 0 1 1-2 0v-1zm6-4a1 1 0 1 1 2 0v5a1 1 0 1 1-2 0V7zM7 9a1 1 0 0 1 2 0v3a1 1 0 1 1-2 0V9z"/><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg></button>
               <button name="delete-event" title="delete event"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
             </div>
+            <label class="toggle" id="highlight-toggle">
+              <input type="checkbox" name="highlight" title="highlight"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M7.657 6.247c.11-.33.576-.33.686 0l.645 1.937a2.89 2.89 0 0 0 1.829 1.828l1.936.645c.33.11.33.576 0 .686l-1.937.645a2.89 2.89 0 0 0-1.828 1.829l-.645 1.936a.361.361 0 0 1-.686 0l-.645-1.937a2.89 2.89 0 0 0-1.828-1.828l-1.937-.645a.361.361 0 0 1 0-.686l1.937-.645a2.89 2.89 0 0 0 1.828-1.828l.645-1.937zM3.794 1.148a.217.217 0 0 1 .412 0l.387 1.162c.173.518.579.924 1.097 1.097l1.162.387a.217.217 0 0 1 0 .412l-1.162.387A1.734 1.734 0 0 0 4.593 5.69l-.387 1.162a.217.217 0 0 1-.412 0L3.407 5.69A1.734 1.734 0 0 0 2.31 4.593l-1.162-.387a.217.217 0 0 1 0-.412l1.162-.387A1.734 1.734 0 0 0 3.407 2.31l.387-1.162zM10.863.099a.145.145 0 0 1 .274 0l.258.774c.115.346.386.617.732.732l.774.258a.145.145 0 0 1 0 .274l-.774.258a1.156 1.156 0 0 0-.732.732l-.258.774a.145.145 0 0 1-.274 0l-.258-.774a1.156 1.156 0 0 0-.732-.732L9.1 2.137a.145.145 0 0 1 0-.274l.774-.258c.346-.115.617-.386.732-.732L10.863.1z"/></svg>
+            </label>
+            <label class="toggle" id="picker-toggle">
+              <input type="checkbox" name="tile-picker" title="pick tile"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.354.646a1.207 1.207 0 0 0-1.708 0L8.5 3.793l-.646-.647a.5.5 0 1 0-.708.708L8.293 5l-7.147 7.146A.5.5 0 0 0 1 12.5v1.793l-.854.853a.5.5 0 1 0 .708.707L1.707 15H3.5a.5.5 0 0 0 .354-.146L11 7.707l1.146 1.147a.5.5 0 0 0 .708-.708l-.647-.646 3.147-3.146a1.207 1.207 0 0 0 0-1.708l-2-2zM2 12.707l7-7L10.293 7l-7 7H2v-1.293z"/></svg>
+            </label>
           </div>
         </div>
       </div>
