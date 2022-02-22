@@ -2357,20 +2357,27 @@ function drawTilemapLayer(destination, tileset, tileToFrame, palette, { tilemap,
     drawRecolorLayer(destination, (backg, color, tiles) => {
         for (let ty = 0; ty < 16; ++ty) {
             for (let tx = 0; tx < 16; ++tx) {
-                const back = backmap[ty][tx];
-                const fore = foremap[ty][tx];
-                const tileIndex = tilemap[ty][tx];
+                let back = backmap[ty][tx];
+                let fore = foremap[ty][tx];
+                let tileIndex = tilemap[ty][tx];
                 
+                if (tileIndex === 0) {
+                    fore = back;
+                    tileIndex = 1;
+                }
+
                 const frameIndex = tileToFrame.get(tileIndex);
                 const { x, y, size } = getTileCoords(tileset.canvas, frameIndex);
 
-                if (tileIndex === 0) continue;
+                if (back > 0) {
+                    backg.fillStyle = palette.colors[back];
+                    backg.fillRect(tx * size, ty * size, size, size);
+                }
 
-                backg.fillStyle = palette.colors[back];
-                backg.fillRect(tx * size, ty * size, size, size);
-
-                color.fillStyle = palette.colors[fore];
-                color.fillRect(tx * size, ty * size, size, size);
+                if (fore > 0) {
+                    color.fillStyle = palette.colors[fore];
+                    color.fillRect(tx * size, ty * size, size, size);
+                }
 
                 tiles.drawImage(
                     tileset.canvas,
@@ -2390,23 +2397,29 @@ function drawTilemapLayer(destination, tileset, tileToFrame, palette, { tilemap,
  * @param {BipsiDataEvent[]} events 
  */
 function drawEventLayer(destination, tileset, tileToFrame, palette, events) {
-    const [background, foreground, highlight] = palette.colors;
-
     drawRecolorLayer(destination, (backg, color, tiles) => {
         events.forEach((event) => {
             const [tx, ty] = event.position;
             const graphicField = oneField(event, "graphic", "tile");
             if (graphicField) {
+                let { fg, bg } = FIELD(event, "colors", "colors") ?? { bg: 1, fg: 3 };
+
                 const frameIndex = tileToFrame.get(graphicField.data) ?? 0;
                 const { x, y, size } = getTileCoords(tileset.canvas, frameIndex);
     
-                if (background && !eventIsTagged(event, "transparent")) {
-                    backg.fillStyle = background;
+                if (eventIsTagged(event, "transparent")) {
+                    bg = 0;
+                }
+
+                if (bg > 0) {
+                    backg.fillStyle = palette.colors[bg];
                     backg.fillRect(tx * size, ty * size, size, size);
                 }
 
-                color.fillStyle = highlight;
-                color.fillRect(tx * size, ty * size, size, size);
+                if (fg > 0) {
+                    color.fillStyle = palette.colors[fg];
+                    color.fillRect(tx * size, ty * size, size, size);
+                }
 
                 tiles.drawImage(
                     tileset.canvas,
@@ -2424,9 +2437,12 @@ function drawEventLayer(destination, tileset, tileToFrame, palette, events) {
  * @param {BipsiDataRoom} room 
  */
  function drawRoomThumbnail(rendering, palette, room) {
-    const [background, foreground, highlight] = palette.colors;
+    const [, background, foreground, highlight] = palette.colors;
     for (let y = 0; y < 16; ++y) {
         for (let x = 0; x < 16; ++x) {
+            const foreground = palette.colors[room.foremap[y][x]];
+            const background = palette.colors[room.backmap[y][x]];
+
             const color = room.wallmap[y][x] === 1 ? foreground : background;
             rendering.fillStyle = color;
             rendering.fillRect(x, y, 1, 1);
@@ -2444,11 +2460,14 @@ function drawEventLayer(destination, tileset, tileToFrame, palette, events) {
  * @param {CanvasRenderingContext2D} rendering 
  * @param {BipsiDataPalette} palette
  */
- function drawPaletteThumbnail(rendering, palette) {
-    palette.colors.forEach((color, i) => {
-        rendering.fillStyle = color;
-        rendering.fillRect(i, 0, 1, 1);
-    });
+function drawPaletteThumbnail(rendering, palette) {
+    for (let y = 0; y < 2; ++y) {
+        for (let x = 0; x < 4; ++x) {
+            rendering.fillStyle = palette.colors[y * 4 + x];
+            rendering.fillRect(x, y, 1, 1);
+        }
+    }
+    rendering.clearRect(0, 0, 1, 1);
 }
 
 
@@ -2924,11 +2943,44 @@ function drawRecolorLayer(destination, render) {
 
     render(BACKG_PAGE, COLOR_PAGE, TILES_PAGE);
 
+    BACKG_PAGE.globalCompositeOperation = "destination-out";
+    BACKG_PAGE.drawImage(TILES_PAGE.canvas, 0, 0);
+    BACKG_PAGE.globalCompositeOperation = "source-over";
+
     COLOR_PAGE.globalCompositeOperation = "destination-in";
     COLOR_PAGE.drawImage(TILES_PAGE.canvas, 0, 0);
     COLOR_PAGE.globalCompositeOperation = "source-over";
+
     destination.drawImage(BACKG_PAGE.canvas, 0, 0);
     destination.drawImage(COLOR_PAGE.canvas, 0, 0);
+}
+
+const BACKG_PAGE_D = createRendering2D(128, 128); 
+const COLOR_PAGE_D = createRendering2D(128, 128);
+const TILES_PAGE_D = createRendering2D(128, 128);
+
+function drawRecolorLayerDynamic(destination, render) {
+    const { width, height } = destination.canvas;
+    resizeRendering2D(BACKG_PAGE_D, width, height);
+    resizeRendering2D(COLOR_PAGE_D, width, height);
+    resizeRendering2D(TILES_PAGE_D, width, height);
+
+    fillRendering2D(BACKG_PAGE_D);
+    fillRendering2D(COLOR_PAGE_D);
+    fillRendering2D(TILES_PAGE_D);
+
+    render(BACKG_PAGE_D, COLOR_PAGE_D, TILES_PAGE_D);
+
+    BACKG_PAGE_D.globalCompositeOperation = "destination-out";
+    BACKG_PAGE_D.drawImage(TILES_PAGE_D.canvas, 0, 0);
+    BACKG_PAGE_D.globalCompositeOperation = "source-over";
+
+    COLOR_PAGE_D.globalCompositeOperation = "destination-in";
+    COLOR_PAGE_D.drawImage(TILES_PAGE_D.canvas, 0, 0);
+    COLOR_PAGE_D.globalCompositeOperation = "source-over";
+
+    destination.drawImage(BACKG_PAGE_D.canvas, 0, 0);
+    destination.drawImage(COLOR_PAGE_D.canvas, 0, 0);
 }
 
 class BipsiPlayback extends EventTarget {
@@ -3211,7 +3263,7 @@ class BipsiPlayback extends EventTarget {
         const avatar = getEventById(this.data, this.avatarId);
         const room = roomFromEvent(this.data, avatar);
         const palette = this.getActivePalette();
-        const [background] = palette.colors;
+        const [, background] = palette.colors;
         const tileset = this.stateManager.resources.get(this.data.tileset);
 
         // find current animation frame for each tile
@@ -3298,7 +3350,7 @@ class BipsiPlayback extends EventTarget {
     }
 
     async title(script, options={}) {
-        const [background] = this.getActivePalette().colors;
+        const [, background] = this.getActivePalette().colors;
         options = { anchorY: .5, backgroundColor: background, ...options };
         return this.say(script, options);
     }
@@ -3950,7 +4002,7 @@ function makeBlankRoom(id) {
 function makeBlankPalette(id) {
     return {
         id,
-        colors: ["#3c6fad","#d8d4dd","#ff8e9e"],
+        colors: ["#000000", ...ZEROES(7).map(() => rgbToHex({ r: getRandomInt(0, 256), g: getRandomInt(0, 256), b: getRandomInt(0, 256) }))],
     }
 }
 
@@ -3983,11 +4035,6 @@ function updateProject(project) {
     
     const repairLocations = !locationFields.every((location) => getRoomById(project, location.data.room));
 
-    project.palettes.forEach((palette, i) => {
-        if (palette.id !== undefined) return;
-        project.palettes[i] = { id: i, colors: palette };
-    });
-
     project.rooms.forEach((room) => {
         room.backmap = room.backmap ?? ZEROES(16).map(() => REPEAT(16, 0));
         room.foremap = room.foremap ?? ZEROES(16).map(() => REPEAT(16, 1));
@@ -4003,10 +4050,40 @@ function updateProject(project) {
                     }
                 }
             }
+            room.highmap = undefined;
         }
 
         room.id = room.id ?? nextRoomId(project);
     });
+
+    const fixPalettes = project.palettes[0].id === undefined && project.palettes[0].length === 3;
+
+    project.palettes.forEach((palette, i) => {
+        if (fixPalettes) {
+            project.palettes[i] = { id: i, colors: palette };
+            palette = project.palettes[i];
+
+            palette.colors.splice(0, 0, "#000000");
+            for (let i = 4; i < 8; ++i) {
+                palette.colors.push(rgbToHex({ 
+                    r: getRandomInt(0, 256), 
+                    g: getRandomInt(0, 256), 
+                    b: getRandomInt(0, 256),
+                }));
+            }
+        }
+    });
+
+    if (fixPalettes) {
+        project.rooms.forEach((room) => {
+            for (let y = 0; y < 16; ++y) {
+                for (let x = 0; x < 16; ++x) {
+                    room.backmap[y][x] += 1;
+                    room.foremap[y][x] += 1;
+                }
+            }
+        });
+    }
 
     if (repairLocations) {
         locationFields.forEach((field) => {
@@ -4060,7 +4137,7 @@ class PaletteEditor {
         ).canvas;
 
         const margin = constants.colorwheelMargin;
-        this.colorHueSat.style.setProperty("margin", `-${margin}px`);
+        //this.colorHueSat.style.setProperty("margin", `-${margin}px`);
         this.colorHueSat.width += margin * 2;
         this.colorHueSat.height += margin * 2;
 
@@ -4068,7 +4145,7 @@ class PaletteEditor {
         this.colorValue = ui.slider("color-value");
         this.colorHex = ui.text("color-hex");
 
-        this.colorIndex.selectedIndex = 0;
+        this.colorIndex.selectedIndex = 1;
 
         this.colorIndex.addEventListener("change", () => {
             this.updateTemporaryFromData();
@@ -4162,7 +4239,7 @@ class PaletteEditor {
 
         // recolor the color select buttons to the corresponding color
         ALL("#color-index-select label").forEach((label, i) => {
-            label.style.background = palette.colors[i];
+            label.style.background = palette.colors[i+1];
         });
 
         // color wheel:
@@ -4234,6 +4311,7 @@ class PaletteEditor {
 const FIELD_DEFAULTS = {
     tag: true,
     tile: 0,
+    colors: { fg: 3, bg: 1 },
     dialogue: "",
     location: { room: 0, position: [0, 0] },
     javascript: "",
@@ -4303,6 +4381,7 @@ const EVENT_TEMPLATES = {
     ],
     character: [
         { key: "graphic", type: "tile", data: 0 },
+        { key: "colors", type: "colors", data: { bg: 1, fg: 3 } },
         { key: "solid", type: "tag", data: true },
         { key: "say", type: "dialogue", data: "hello" },
     ],
@@ -4312,6 +4391,7 @@ const EVENT_TEMPLATES = {
     player: [
         { key: "is-player", type: "tag", data: true },
         { key: "graphic", type: "tile", data: 0 },
+        { key: "colors", type: "colors", data: { bg: 1, fg: 3 } },
         { key: "title", type: "dialogue", data: "your game title" },
         { key: "page-color", type: "text", data: "black" },
     ],
@@ -4452,6 +4532,9 @@ class EventEditor {
             json: ONE("#field-json-editor textarea"),
             dialogue: ONE("#field-dialogue-editor textarea"),
             javascript: ONE("#field-javascript-editor textarea"),
+
+            fgIndex: ui.radio("field-foreground-index"),
+            bgIndex: ui.radio("field-background-index"),
         };
 
         this.positionSelect = ONE("#field-position-select");
@@ -4522,6 +4605,19 @@ class EventEditor {
                 field.data.position = [tx, ty];
             });
         });
+
+        this.valueEditors.bgIndex.addEventListener("change", (event) => {
+            this.editor.stateManager.makeChange(async (data) => {
+                const { field } = this.getSelections(data);
+                field.data.bg = this.valueEditors.bgIndex.selectedIndex;
+            });
+        });
+        this.valueEditors.fgIndex.addEventListener("change", (event) => {
+            this.editor.stateManager.makeChange(async (data) => {
+                const { field } = this.getSelections(data);
+                field.data.fg = this.valueEditors.fgIndex.selectedIndex;
+            });
+        });
     }
 
     get showDialoguePreview() {
@@ -4580,6 +4676,7 @@ class EventEditor {
             ONE("#field-tile-editor").hidden = true;
             ONE("#field-location-editor").hidden = true;
             ONE("#field-file-editor").hidden = true;
+            ONE("#field-colors-editor").hidden = true;
 
             if (field) {
                 if (field.type === "tag") {
@@ -4599,6 +4696,10 @@ class EventEditor {
                     ONE("#field-tile-editor").hidden = false;
                     const index = this.editor.stateManager.present.tiles.findIndex((tile) => tile.id === field.data);
                     this.editor.eventTileBrowser.selectedTileIndex = index;
+                } else if (field.type === "colors") {
+                    ONE("#field-colors-editor").hidden = false;
+                    this.valueEditors.bgIndex.selectedIndex = field.data.bg;
+                    this.valueEditors.fgIndex.selectedIndex = field.data.fg;
                 } else if (field.type === "location") {
                     ONE("#field-location-editor").hidden = false;
                     let index = data.rooms.findIndex((room) => room.id == field.data.room);
@@ -4809,41 +4910,32 @@ class TileEditor {
     }
 
     redraw() {
-        const { data, tileset, room, tile } = this.editor.getSelections();
+        const { data, tileset, room, tile, bg, fg } = this.editor.getSelections();
         if (!tile) return;
 
         this.editor.tileEditor.animateToggle.setCheckedSilent(tile.frames.length > 1);
         this.editor.actions.swapTileFrames.disabled = tile.frames.length === 1;
         this.editor.renderings.tilePaint1.canvas.style.opacity = tile.frames.length === 1 ? "0%" : null;
 
-        const [bg, fg, hi] = getPaletteById(data, room.palette).colors;
-
-        const color = this.editor.highlight.checked ? hi : fg;
-        const tilesetC = recolorMask(tileset, color);
-
-        const grid = true || this.editor.tileGrid.checked;
+        const tilesetC = recolorMask(tileset, fg);
 
         [this.editor.renderings.tilePaint0, this.editor.renderings.tilePaint1].forEach((rendering, i) => {
-            fillRendering2D(rendering, bg);
+            fillRendering2D(rendering, bg === "#000000" ? undefined : bg);
+
             const frameIndex = tile.frames[i] ?? tile.frames[0];
             const { x, y, size } = getTileCoords(tileset.canvas, frameIndex);
+            rendering.globalCompositeOperation = fg === "#000000" ? "destination-out" : "source-over"; 
             rendering.drawImage(
                 tilesetC.canvas,
                 x, y, size, size,
                 0, 0, size * 20, size * 20,
             );
+            rendering.globalCompositeOperation = "source-over";
 
-            if (grid) {
-                rendering.globalAlpha = .25;
-                rendering.drawImage(TILE_GRID.canvas, 0, 0);
-                rendering.globalAlpha = 1;
-            }
+            rendering.globalAlpha = .25;
+            rendering.drawImage(TILE_GRID.canvas, 0, 0);
+            rendering.globalAlpha = 1;
         });
-
-        this.editor.renderings.tilePaintA.drawImage(
-            [this.editor.renderings.tilePaint0, this.editor.renderings.tilePaint1][this.editor.frame].canvas,
-            0, 0, 8, 8,
-        );
     }
 }
 
@@ -4875,7 +4967,6 @@ class BipsiEditor extends EventTarget {
         this.renderings = {
             tilePaint0: ONE("#tile-paint-0").getContext("2d"),
             tilePaint1: ONE("#tile-paint-1").getContext("2d"),
-            tilePaintA: ONE("#tile-paint-a").getContext("2d"),
 
             tileMapPaint: ONE("#tile-map-paint").getContext("2d"),
             paletteRoom: ONE("#palette-room").getContext("2d"),
@@ -4896,12 +4987,25 @@ class BipsiEditor extends EventTarget {
             });
         }
 
+        this.paintBackground = ui.toggle("room-paint-background");
+        this.paintForeground = ui.toggle("room-paint-foreground")
+        this.paintBackground.checked = true;
+        this.paintForeground.checked = true;
+
         this.frameAdjustWindow = ONE("#frame-adjust-window");
         this.showFrameAdjust = ui.toggle("show-frame-adjust");
         this.showFrameAdjust.addEventListener("change", () => {
             this.frameAdjustWindow.hidden = !this.showFrameAdjust.checked;
         });
         autoCloseToggledWindow(this.frameAdjustWindow, this.showFrameAdjust, "show-frame-adjust");
+
+        this.colorSelectWindow = ONE("#color-select-window");
+        this.showColorSelect = ui.toggle("show-color-window");
+        this.showColorSelect.addEventListener("change", () => {
+            this.colorSelectWindow.hidden = !this.showColorSelect.checked;
+        });
+        autoCloseToggledWindow(this.colorSelectWindow, this.showColorSelect, "show-color-window");
+        this.colorSelectPreview = ONE(`[name="show-color-window"] + div canvas`);
 
         this.logWindow = ONE("#log-window");
         this.showLog = ui.toggle("show-log");
@@ -5022,6 +5126,16 @@ class BipsiEditor extends EventTarget {
         this.tilePaintFrameSelect = ui.radio("tile-paint-frame");
         this.modeSelect = ui.radio("mode-select");
         this.roomPaintTool = ui.radio("room-paint-tool");
+        this.roomColorMode = ui.radio("room-color-mode");
+        this.roomColorMode.selectedIndex = 0;
+
+        this.fgIndex = ui.radio("foreground-index");
+        this.bgIndex = ui.radio("background-index");
+        this.fgIndex.selectedIndex = 2;
+        this.bgIndex.selectedIndex = 1;
+
+        this.fgIndex.addEventListener("change", () => { this.requestRedraw(); this.redrawTileBrowser(); });
+        this.bgIndex.addEventListener("change", () => { this.requestRedraw(); this.redrawTileBrowser(); });
 
         this.modeSelect.tab(ONE("#info-tab-body"), "info");
         this.modeSelect.tab(ONE("#info-tab-viewport"), "info");
@@ -5035,9 +5149,11 @@ class BipsiEditor extends EventTarget {
         this.roomPaintTool.tab(ONE("#draw-room-events-controls"), "events");
         this.roomPaintTool.tab(ONE("#room-events-toolbar"), "events");
         this.roomPaintTool.tab(ONE("#draw-room-palette-controls"), "color");
+        this.roomPaintTool.tab(ONE("#draw-room-color-mode"), "color");
+        
+        this.roomPaintTool.tab(ONE("#color-select-window-toggle"), "tile");
 
         this.roomPaintTool.tab(ONE("#draw-room-tile-controls"), "tile", "high", "pick");
-        this.roomPaintTool.tab(ONE("#highlight-toggle"), "tile", "high", "pick");
         this.roomPaintTool.tab(ONE("#picker-toggle"), "tile", "high", "pick");
 
         this.roomGrid = ui.toggle("room-grid");
@@ -5129,6 +5245,8 @@ class BipsiEditor extends EventTarget {
             copyEvent: ui.action("copy-event", () => this.copySelectedEvent()),
             pasteEvent: ui.action("paste-event", () => this.pasteSelectedEvent()),
             deleteEvent: ui.action("delete-event", () => this.deleteSelectedEvent()),
+
+            randomiseColor: ui.action("randomise-color", () => this.randomiseSelectedColor()),
         };
 
         // can't undo/redo/paste yet
@@ -5166,10 +5284,10 @@ class BipsiEditor extends EventTarget {
                     this.actions.save.invoke();
                 }
             } else if (!textedit) {
-                const topkeys = ["KeyQ", "KeyW", "KeyE", "KeyR"]; 
+                const topkeys = ["KeyQ", "KeyW", "KeyE", "KeyR", "KeyT"]; 
                 topkeys.forEach((code, i) => {
                     if (event.code === code) {
-                        this.modeSelect.selectedIndex = i;
+                        this.roomPaintTool.selectedIndex = i;
                         event.preventDefault();
                     }
                 });
@@ -5235,7 +5353,7 @@ class BipsiEditor extends EventTarget {
             const palette = getPaletteById(data, id);
             const index = data.palettes.indexOf(palette);
             this.paletteSelectWindow.select.selectedIndex = index;
-            this.paletteEditor.colorIndex.selectedIndex = color;
+            this.paletteEditor.colorIndex.selectedIndex = color-1;
 
             this.requestRedraw();
             this.eventEditor.refresh();
@@ -5268,6 +5386,11 @@ class BipsiEditor extends EventTarget {
             this.tileBrowser.select.setSelectedIndexSilent(index);
             // this.roomTileBrowser.select.setSelectedIndexSilent(index);
             this.tileEditor.redraw();
+        }
+
+        const setSelectedColors = (bgIndex, fgIndex) => {
+            this.bgIndex.selectedIndex = bgIndex;
+            this.fgIndex.selectedIndex = fgIndex;
         }
 
         this.tileBrowser.select.addEventListener("change", () => {
@@ -5393,7 +5516,7 @@ class BipsiEditor extends EventTarget {
                 return;
             }
 
-            const { tile, room, data } = this.getSelections();
+            const { tile, room, data, bgIndex, fgIndex, colorIndex } = this.getSelections();
 
             const scale = canvas.width / (8 * 16);
 
@@ -5415,10 +5538,9 @@ class BipsiEditor extends EventTarget {
 
             const prevTile = room.tilemap[y][x];
 
-            const pal = this.highlight.checked ? 2 : 1;
             const same = room.tilemap[y][x] === tile.id 
-                      && room.backmap[y][x] === 0
-                      && room.foremap[y][x] === pal;
+                      && room.backmap[y][x] === bgIndex
+                      && room.foremap[y][x] === fgIndex;
 
             const nextTile = same ? 0 : tile.id;
             const nextWall = 1 - room.wallmap[y][x];
@@ -5428,8 +5550,9 @@ class BipsiEditor extends EventTarget {
                     const index = Math.max(0, data.tiles.findIndex((tile) => tile.id === prevTile));
 
                     setSelectedTile(index);
+                    setSelectedColors(room.backmap[y][x], room.foremap[y][x]);
                 }
-            } else if (tool === "wall" || tool === "tile" || tool === "high") {    
+            } else if (tool === "wall" || tool === "tile" || tool === "high" || tool === "color") {    
                 this.stateManager.makeCheckpoint();
 
                 const setIfWithin = (map, x, y, value) => {
@@ -5439,12 +5562,12 @@ class BipsiEditor extends EventTarget {
                 const plots = {
                     tile: (x, y) => { 
                         setIfWithin(room.tilemap, x, y, nextTile); 
-                        setIfWithin(room.backmap, x, y, 0); 
-                        setIfWithin(room.foremap, x, y, pal); 
+                        if (this.paintBackground.checked) setIfWithin(room.backmap, x, y, bgIndex); 
+                        if (this.paintForeground.checked) setIfWithin(room.foremap, x, y, fgIndex); 
                     },
                     wall: (x, y) => setIfWithin(room.wallmap, x, y, nextWall),
+                    color: (x, y) => setIfWithin(this.roomColorMode.value === "bg" ? room.backmap : room.foremap, x, y, colorIndex+1),
                 }
-                plots.high = plots.tile;
 
                 const plot = plots[tool];
                 plot(x, y);
@@ -5493,7 +5616,7 @@ class BipsiEditor extends EventTarget {
                     cycleEvents(room.events, -dx, -dy);
                     redraw();
                 });
-            }
+            } 
         };
 
         this.renderings.tileMapPaint.canvas.addEventListener("pointerdown", (event) => onRoomPointer(event, this.renderings.tileMapPaint.canvas));
@@ -5557,6 +5680,11 @@ class BipsiEditor extends EventTarget {
         const room = data.rooms[roomIndex];
         const palette = data.palettes[paletteIndex];
 
+        const bgIndex = this.bgIndex.selectedIndex;
+        const fgIndex = this.fgIndex.selectedIndex;
+        const bg = palette?.colors[bgIndex];
+        const fg = palette?.colors[fgIndex];
+
         const tileFrame = tile?.frames[frameIndex] ?? tile?.frames[0];
 
         const event = getEventById(data, this.selectedEventId);
@@ -5568,6 +5696,7 @@ class BipsiEditor extends EventTarget {
             paletteIndex, palette, colorIndex,
             tileIndex, tile, frameIndex, tileSize, 
             event, tileFrame,
+            fgIndex, bgIndex, fg, bg,
         }
     }
 
@@ -5592,12 +5721,10 @@ class BipsiEditor extends EventTarget {
         const { data, tileset } = this.getSelections();
         const room = data.rooms[roomIndex];
         palette = palette ?? data.palettes[room.palette];
-        const [background] = palette.colors;
 
         // find current animation frame for each tile
         const tileToFrame = makeTileToFrameMap(data.tiles, this.frame);
 
-        fillRendering2D(rendering, background);
         drawTilemapLayer(rendering, tileset, tileToFrame, palette, room);
         drawEventLayer(rendering, tileset, tileToFrame, palette, room.events);
     }
@@ -5634,16 +5761,16 @@ class BipsiEditor extends EventTarget {
     redraw() {
         this.tileEditor.redraw();
 
-        const { data, room, tileSize, roomIndex, tileset } = this.getSelections();
+        const { data, room, tileSize, roomIndex, tileset, fgIndex, bgIndex } = this.getSelections();
         const palette = this.roomPaintTool.value === "color" 
                       ? this.paletteEditor.getPreviewPalette()  
                       : getPaletteById(data, room.palette);
-        const [background] = palette.colors;
 
         const tileToFrame = makeTileToFrameMap(data.tiles, this.frame);
 
-        fillRendering2D(TEMP_128, background);
+        fillRendering2D(TEMP_128);
         drawTilemapLayer(TEMP_128, tileset, tileToFrame, palette, room);
+        fillRendering2D(this.renderings.tileMapPaint);
         this.renderings.tileMapPaint.drawImage(TEMP_128.canvas, 0, 0, 256, 256);
         
         fillRendering2D(TEMP_128);
@@ -5677,6 +5804,15 @@ class BipsiEditor extends EventTarget {
 
         this.refreshRoomSelect();
         this.refreshPaletteSelect();
+
+        palette.colors.forEach((color, i) => {
+            if (i === 0) return;
+            this.fgIndex.inputs[i].style.backgroundColor = color;
+            this.bgIndex.inputs[i].style.backgroundColor = color;
+  
+            this.eventEditor.valueEditors.fgIndex.inputs[i].style.backgroundColor = color;
+            this.eventEditor.valueEditors.bgIndex.inputs[i].style.backgroundColor = color;
+        });
 
         this.drawRoom(TEMP_128, roomIndex, { palette });
         this.renderings.paletteRoom.drawImage(TEMP_128.canvas, 0, 0);
@@ -5716,6 +5852,10 @@ class BipsiEditor extends EventTarget {
         this.actions.reorderPaletteBefore.disabled = this.paletteSelectWindow.select.selectedIndex <= 0;
         this.actions.reorderPaletteAfter.disabled = this.paletteSelectWindow.select.selectedIndex >= this.stateManager.present.palettes.length - 1;
 
+        const fg = fgIndex === 0 ? "transparent" : palette.colors[fgIndex];
+        const bg = bgIndex === 0 ? "transparent" : palette.colors[bgIndex];
+        this.colorSelectPreview.style.background = `linear-gradient(135deg, ${fg} 0%, ${fg} 50%, ${bg} 50%, ${bg} 100%)`
+
         this.redrawDialoguePreview();
     } 
 
@@ -5746,16 +5886,16 @@ class BipsiEditor extends EventTarget {
         const { data, paletteIndex, colorIndex } = this.getSelections();
 
         const thumbs = data.palettes.map((palette) => {
-            const thumb = createRendering2D(3, 1);
+            const thumb = createRendering2D(4, 2);
             drawPaletteThumbnail(thumb, palette);
             return { id: palette.id, thumb: thumb.canvas };
         });
 
         this.paletteSelectWindow.updatePalettes(thumbs);
-
+        
         if (paletteIndex >= 0) {
             this.colorSelect.updatePalettes(data.palettes);
-            this.colorSelect.select.setSelectedIndexSilent(paletteIndex * 3 + colorIndex);
+            this.colorSelect.select.setSelectedIndexSilent(paletteIndex * 7 + colorIndex);
         }
 
         this.paletteSelectWindow.select.setSelectedIndexSilent(Math.max(this.paletteSelectWindow.select.selectedIndex, 0));
@@ -5780,42 +5920,49 @@ class BipsiEditor extends EventTarget {
     }
 
     async redrawTileBrowser() {
-        const { data, room, tileset } = this.getSelections();
-        const [, foreground, highlight] = getPaletteById(data, room.palette).colors;
+        const { data, room, tileset, bg, fg } = this.getSelections();
 
-        const hi = this.roomPaintTool.value === "high" || this.highlight.checked || this.roomPaintTool.value === "events";
-        const color = hi ? highlight : foreground;
-        const tilesetC = recolorMask(tileset, color, TEMP_TILESET0);
+        const hi = this.roomPaintTool.value === "events";
+        const tilesetC = recolorMask(tileset, fg, TEMP_TILESET0);
 
         // draw tileset frame
         const cols = 16;
         const rows = Math.ceil(data.tiles.length / cols);
-        const frame0 = createRendering2D(cols * 8, rows * 8);
-        const frame1 = createRendering2D(cols * 8, rows * 8);
+        const width = cols * constants.tileSize;
+        const height = rows * constants.tileSize;
 
-        data.tiles.forEach(({ frames }, i) => {
-            const index0 = frames[0];
-            const index1 = frames[1] ?? index0;
+        const frame0 = createRendering2D(width, height);
+        const frame1 = createRendering2D(width, height);
 
-            const tx = i % 16;
-            const ty = Math.floor(i / 16);
+        function renderTileset(destination, frame) {
+            data.tiles.forEach(({ frames }, i) => {
+                const index = frames[frame] ?? frames[0];
+    
+                const tx = i % 16;
+                const ty = Math.floor(i / 16);
 
-            {
-                const { x, y, size } = getTileCoords(tilesetC.canvas, index0);
-                frame0.drawImage(
+                const { x, y, size } = getTileCoords(tilesetC.canvas, index);
+                destination.drawImage(
                     tilesetC.canvas,
                     x, y, size, size, 
                     tx * size, ty * size, size, size,
                 );
-            }
-            {
-                const { x, y, size } = getTileCoords(tilesetC.canvas, index1);
-                frame1.drawImage(
-                    tilesetC.canvas,
-                    x, y, size, size, 
-                    tx * size, ty * size, size, size,
-                );
-            }
+            });
+        }
+
+        fillRendering2D(frame0);
+        fillRendering2D(frame1);
+
+        drawRecolorLayerDynamic(frame0, (back, color, tiles) => {
+            fillRendering2D(back, bg === "#000000" ? undefined : bg);
+            fillRendering2D(color, fg === "#000000" ? undefined : fg);
+            renderTileset(tiles, 0);
+        });
+
+        drawRecolorLayerDynamic(frame1, (back, color, tiles) => {
+            fillRendering2D(back, bg === "#000000" ? undefined : bg);
+            fillRendering2D(color, fg === "#000000" ? undefined : fg);
+            renderTileset(tiles, 1);
         });
 
         // regenerate tileset uris
@@ -6127,6 +6274,16 @@ class BipsiEditor extends EventTarget {
             const event = getEventById(data, this.selectedEventId);
             arrayDiscard(room.events, event);
             this.selectedEventId = undefined;
+        });
+    }
+
+    randomiseSelectedColor() {
+        this.stateManager.makeChange(async (data) => {
+            const { colorIndex, palette } = this.getSelections(data);
+            const h = Math.random();
+            const s = Math.random();
+            const v = Math.random();
+            palette.colors[colorIndex+1] = rgbToHex(HSVToRGB({ h, s, v }));
         });
     }
 
@@ -6479,7 +6636,7 @@ class TileBrowser {
         const { data, room } = this.editor.getSelections();
 
         root.style.setProperty("--tileset-background-size", `${w}px ${h}px`);
-        root.style.setProperty("--tileset-background-color", getPaletteById(data, room.palette).colors[0]);
+        //root.style.setProperty("--tileset-background-color", getPaletteById(data, room.palette).colors[0]);
 
         this.items.map(data.tiles, (tile, item, index) => {
             const { x, y } = getTileCoords(canvases[0], index);
@@ -6730,9 +6887,9 @@ class PaletteSelect {
 
     setup(id, colors) {
         this.inputs.forEach((input, i) => {
-            input.title = `select palette ${id}, color ${i}`;
-            input.value = `${id},${i}`;
-            input.style.backgroundColor = colors[i];
+            input.title = `select palette ${id}, color ${i+1}`;
+            input.value = `${id},${i+1}`;
+            input.style.backgroundColor = colors[i+1];
         });
     }
 
@@ -7273,6 +7430,17 @@ input[type="text"], textarea {
 .grid3 > *:nth-last-child(3) { border-bottom-left-radius: 1em; }
 .grid3 > *:nth-last-child(1) { border-bottom-right-radius: 1em; }
 
+.grid4 {
+    display: grid;
+    grid-template-columns: repeat(4, auto);
+}
+
+.grid4 > * { border-radius: 0; }
+.grid4 > *:nth-child(1) { border-top-left-radius: 1em; }
+.grid4 > *:nth-child(4) { border-top-right-radius: 1em; }
+.grid4 > *:nth-last-child(4) { border-bottom-left-radius: 1em; }
+.grid4 > *:nth-last-child(1) { border-bottom-right-radius: 1em; }
+
 body {
     touch-action: none;
     background: var(--page-color, black);
@@ -7407,7 +7575,7 @@ select {
 
     width: 40px; height: 40px;
 
-    background-color: var(--tileset-background-color);
+    /* background-color: var(--tileset-background-color); */
     background-image: var(--tileset-background-image);
     background-size: var(--tileset-background-size);
 }
@@ -7456,9 +7624,28 @@ input + *, input + * + * {
     z-index: 6;
 }
 
+.picker-toggle-preview {
+    border-radius: 0.25rem;
+    box-shadow: var(--black-outline-shadow);
+    pointer-events: none;
+
+    width: 32px;
+    height: 32px;
+    background: var(--trans-gradient);
+
+    display: flex;
+    overflow: hidden;
+}
+
 .picker-toggle > canvas {
     width: 32px;
     height: 32px;
+
+    background: var(--trans-gradient);
+
+    border-radius: .25rem;
+    box-shadow: var(--black-outline-shadow);
+    pointer-events: none;
 }
 
 .picker-toggle > * + * + svg {
@@ -7468,12 +7655,6 @@ input + *, input + * + * {
 
 label.toggle#tile-grid {
     max-width: 64px;
-}
-
-.picker-toggle > canvas {
-    border-radius: .25rem;
-    box-shadow: var(--black-outline-shadow);
-    pointer-events: none;
 }
 
 .picker-toggle > *:checked + canvas {
@@ -7665,13 +7846,23 @@ label.toggle#tile-grid {
     min-height: 44px;
 }
 
+.color-select.grid4 label:first-child {
+    border: solid gray 1px;
+    border-right: none;
+    border-bottom: none;
+}
+
 .color-select input[type="radio"]:checked {
     background: none;
     z-index: 5;
-    box-shadow: 0 0 0 .5em white;
+    box-shadow: 0 0 0 6px white;
 }
 
-.color-select label > input {
+.color-select.radio-select, .color-select .horizontal-capsule {
+    gap: 0;
+}
+
+.color-select label > input[type="radio"] {
     background: none;
 }
 
@@ -7741,6 +7932,8 @@ label.toggle#tile-grid {
 
 #tile-map-paint {
     cursor: crosshair;
+
+    background: var(--trans-gradient);
 }
 
 #tile-paint-room {
@@ -8041,11 +8234,7 @@ label.toggle#tile-grid {
     height: 236px;
 }
 
-#move-to-window-position {
-    cursor: pointer;
-}
-
-#move-to-window {
+.popup-window {
     position: absolute;
     width: 512px; height: 256px;
     bottom: calc(48px + .5rem);
@@ -8059,61 +8248,60 @@ label.toggle#tile-grid {
     cursor: initial;
     z-index: 100;
 
-    display: flex;
-    flex-direction: row;
+    box-shadow: 0 0 0 2px black;
+}
+
+#move-to-window-position {
+    cursor: pointer;
+}
+
+#move-to-window {
+    display: flex; flex-direction: row;
     gap: 1rem;
 }
 
 #room-select-window {
-    position: absolute;
-    width: 512px; height: 320px;
-    bottom: calc(48px + .5rem);
-
-    display: flex; flex-direction: column;
-    border-radius: 1rem;
-    padding: 1rem; gap: .5rem;
-
-    background: var(--frame-color);
-
-    cursor: initial;
-    z-index: 100;
-
-    box-shadow: 0 0 0 2px black;
+    height: 320px;
 }
 
 #palette-select-window {
-    position: absolute;
-    width: 512px; height: 320px;
-    bottom: calc(48px + .5rem);
+    height: 320px;
+}
 
+#color-select-window .radio-select {
+    background: none;
+    padding: 0;
+    overflow: visible;
+}
+
+.color-index-select {
+    height: unset;
+    /* height: 128px; */
     display: flex; flex-direction: column;
-    border-radius: 1rem;
-    padding: 1rem; gap: .5rem;
+    gap: 6px;
 
-    background: var(--frame-color);
+    overflow: visible;
+}
 
-    cursor: initial;
-    z-index: 100;
+.color-index-select .radio-select {
+    flex: 1;
 
-    box-shadow: 0 0 0 2px black;
+
+    border-radius: .5rem;
+}
+
+.color-index-select:not(#color-select-window) .radio-select label:first-child {
+    background: var(--trans-gradient);
+}
+
+#color-select-window .radio-select label:nth-child(2) {
+    background: var(--trans-gradient);
 }
 
 #frame-adjust-window {
-    position: absolute;
     width: 256px;
     right: 0;
     bottom: calc(72px + .5rem);
-
-    display: flex; flex-direction: column;
-    border-radius: 1.5rem;
-    padding: 1rem; gap: .5rem;
-
-    background: var(--frame-color);
-
-    cursor: initial;
-    z-index: 100;
-
-    box-shadow: 0 0 0 2px black;
 }
 
 #log-window {
@@ -8149,8 +8337,6 @@ label.toggle#tile-grid {
 }
 
 #variables-window {
-    position: absolute;
-    width: 512px; height: 256px;
     bottom: calc(48px + .5rem);
 
     display: flex; flex-direction: column;
@@ -8367,12 +8553,19 @@ p {
 }
 
 #palette-edit {
-    width: 278px;
+    width: 268px;
 }
 
 #color-huesat {
-    width: 270px;
-    height: 270px;
+    width: 260px;
+    height: 260px;
+
+    margin: -12px -4px;
+}
+
+[name="randomise-color"] {
+    min-height: 48px;
+    min-width: 48px;
 }
 
 .info-action-list > .button, .info-action-list > button {
@@ -8425,7 +8618,7 @@ p {
     </div>
     <div id="editor" data-editor-only="data-editor-only">
       <div id="viewport">
-        <div id="move-to-window" hidden="hidden">
+        <div class="popup-window" id="move-to-window" hidden="hidden">
           <div class="room-select radio-select" id="move-to-window-room" title="select room">
             <template id="move-to-window-room-template">
               <label>
@@ -8529,7 +8722,7 @@ p {
         </div>
       </div>
       <div id="controls">
-        <div id="room-select-window" hidden="hidden">
+        <div class="popup-window" id="room-select-window" hidden="hidden">
           <div class="item-management-buttons">
             <button name="add-new-room" title="add new room"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg></button>
             <button name="duplicate-room" title="duplicate selected room"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13 0H6a2 2 0 0 0-2 2 2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2 2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm0 13V4a2 2 0 0 0-2-2H5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1zM3 4a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4z"/></svg></button>
@@ -8546,7 +8739,7 @@ p {
             </template>
           </div>
         </div>
-        <div id="palette-select-window" hidden="hidden">
+        <div class="popup-window" id="palette-select-window" hidden="hidden">
           <div class="item-management-buttons">
             <button name="add-new-palette" title="add new palette"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg></button>
             <button name="duplicate-palette" title="duplicate selected palette"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13 0H6a2 2 0 0 0-2 2 2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2 2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm0 13V4a2 2 0 0 0-2-2H5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1zM3 4a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4z"/></svg></button>
@@ -8558,12 +8751,76 @@ p {
             <template id="palette-select-window-template">
               <label>
                 <input type="radio" name="palette-select" value="0" title="select palette 0"/>
-                <canvas width="3" height="1"></canvas>
+                <canvas width="4" height="2"></canvas>
               </label>
             </template>
           </div>
         </div>
-        <div class="tile-paint-buttons" id="frame-adjust-window" hidden="hidden">
+        <div class="popup-window color-index-select" id="color-select-window" hidden="hidden">
+          <div class="radio-select horizontal-capsule color-select" id="color-select-foreground" title="select foreground">
+            <label class="toggle">
+              <input type="checkbox" name="room-paint-foreground" title="paint foreground color"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-front" viewBox="0 0 16 16">
+  <path d="M0 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2H2a2 2 0 0 1-2-2V2zm5 10v2a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2v5a2 2 0 0 1-2 2H5z"/>
+</svg>
+            </label>
+            <label>
+              <input type="radio" name="foreground-index" value="0" title="select foreground color 0"/>
+            </label>
+            <label>
+              <input type="radio" name="foreground-index" value="1" title="select foreground color 1"/>
+            </label>
+            <label>
+              <input type="radio" name="foreground-index" value="2" title="select foreground color 2"/>
+            </label>
+            <label>
+              <input type="radio" name="foreground-index" value="3" title="select foreground color 3"/>
+            </label>
+            <label>
+              <input type="radio" name="foreground-index" value="4" title="select foreground color 4"/>
+            </label>
+            <label>
+              <input type="radio" name="foreground-index" value="5" title="select foreground color 5"/>
+            </label>
+            <label>
+              <input type="radio" name="foreground-index" value="6" title="select foreground color 6"/>
+            </label>
+            <label>
+              <input type="radio" name="foreground-index" value="7" title="select foreground color 7"/>
+            </label>
+          </div>
+          <div class="radio-select horizontal-capsule color-select" id="color-select-background" title="select foreground">
+            <label class="toggle">
+              <input type="checkbox" name="room-paint-background" title="paint background color"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-back" viewBox="0 0 16 16">
+  <path d="M0 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2H2a2 2 0 0 1-2-2V2zm2-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H2z"/>
+</svg>
+            </label>
+            <label>
+              <input type="radio" name="background-index" value="0" title="select background color 0"/>
+            </label>
+            <label>
+              <input type="radio" name="background-index" value="1" title="select background color 1"/>
+            </label>
+            <label>
+              <input type="radio" name="background-index" value="2" title="select background color 2"/>
+            </label>
+            <label>
+              <input type="radio" name="background-index" value="3" title="select background color 3"/>
+            </label>
+            <label>
+              <input type="radio" name="background-index" value="4" title="select background color 4"/>
+            </label>
+            <label>
+              <input type="radio" name="background-index" value="5" title="select background color 5"/>
+            </label>
+            <label>
+              <input type="radio" name="background-index" value="6" title="select background color 6"/>
+            </label>
+            <label>
+              <input type="radio" name="background-index" value="7" title="select background color 7"/>
+            </label>
+          </div>
+        </div>
+        <div class="popup-window tile-paint-buttons" id="frame-adjust-window" hidden="hidden">
           <div class="grid3">
             <button name="rotate-tile-anticlockwise" title="rotate tile anticlockwise"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1.146 4.854a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 4H12.5A2.5 2.5 0 0 1 15 6.5v8a.5.5 0 0 1-1 0v-8A1.5 1.5 0 0 0 12.5 5H2.707l3.147 3.146a.5.5 0 1 1-.708.708l-4-4z"/></svg></button>
             <button name="shift-tile-up" title="shift tile up"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 15a.5.5 0 0 0 .5-.5V2.707l3.146 3.147a.5.5 0 0 0 .708-.708l-4-4a.5.5 0 0 0-.708 0l-4 4a.5.5 0 1 0 .708.708L7.5 2.707V14.5a.5.5 0 0 0 .5.5z"/></svg></button>
@@ -8604,7 +8861,7 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.5-alpha (2022/02/20)</h2>
+          <h2>binksi -- 0.5-alpha (2022/02/22)</h2>
           <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
           <p>to get started, use <a href="https://github.com/smwhr/binksi">the binksi repo</a> as a template</p>
           <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
@@ -8728,6 +8985,7 @@ p {
                       <select name="field-type">
                         <option>tag</option>
                         <option>tile</option>
+                        <option>colors</option>
                         <option>dialogue</option>
                         <option>location</option>
                         <option>javascript</option>
@@ -8797,11 +9055,64 @@ p {
                   <button name="field-file-select">select file</button>
                   <input id="field-file-info" type="text" readonly="readonly" value="test"/>
                 </div>
+                <div class="color-index-select" id="field-colors-editor" hidden="hidden">
+                  <div class="radio-select horizontal-capsule color-select" id="field-color-select-foreground" title="select foreground">
+                    <label>
+                      <input type="radio" name="field-foreground-index" value="0" title="select foreground color 0"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="field-foreground-index" value="1" title="select foreground color 1"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="field-foreground-index" value="2" title="select foreground color 2"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="field-foreground-index" value="3" title="select foreground color 3"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="field-foreground-index" value="4" title="select foreground color 4"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="field-foreground-index" value="5" title="select foreground color 5"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="field-foreground-index" value="6" title="select foreground color 6"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="field-foreground-index" value="7" title="select foreground color 7"/>
+                    </label>
+                  </div>
+                  <div class="radio-select horizontal-capsule color-select" id="field-color-select-background" title="select foreground">
+                    <label>
+                      <input type="radio" name="field-background-index" value="0" title="select background color 0"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="field-background-index" value="1" title="select background color 1"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="field-background-index" value="2" title="select background color 2"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="field-background-index" value="3" title="select background color 3"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="field-background-index" value="4" title="select background color 4"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="field-background-index" value="5" title="select background color 5"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="field-background-index" value="6" title="select background color 6"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="field-background-index" value="7" title="select background color 7"/>
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
             <div id="draw-room-tile-controls" hidden="hidden">
               <div class="row" id="tile-paint-row">
-                <canvas id="tile-paint-a" width="8" height="8" draggable="false" title="tile animation preview" hidden="hidden"></canvas>
                 <div class="radio-select" id="tile-paint-canvases">
                   <label>
                     <input type="radio" name="tile-paint-frame"/>
@@ -8846,26 +9157,55 @@ p {
             </div>
             <div id="draw-room-palette-controls" hidden="hidden">
               <div class="column" id="palette-edit">
-                <canvas id="color-huesat" width="246" height="246"></canvas>
+                <canvas id="color-huesat" width="236" height="236"></canvas>
                 <input name="color-value" type="range" min="0" max="1" step=".01"/>
                 <div class="button-row">
                   <input name="color-hex" type="text" value="#ffffff"/>
+                  <button name="randomise-color" title="randomise color"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-dice-6" viewBox="0 0 16 16">
+  <path d="M13 1a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h10zM3 0a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V3a3 3 0 0 0-3-3H3z"/>
+  <path d="M5.5 4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm8 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-8 4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/>
+</svg>
+                  </button>
                 </div>
                 <div class="radio-select color-select horizontal-capsule" id="color-index-select">
-                  <label>
-                    <input type="radio" name="color-index" value="0" title="select palette color 0"/>
-                  </label>
                   <label>
                     <input type="radio" name="color-index" value="1" title="select palette color 1"/>
                   </label>
                   <label>
                     <input type="radio" name="color-index" value="2" title="select palette color 2"/>
                   </label>
+                  <label>
+                    <input type="radio" name="color-index" value="3" title="select palette color 3"/>
+                  </label>
+                  <label>
+                    <input type="radio" name="color-index" value="4" title="select palette color 4"/>
+                  </label>
+                  <label>
+                    <input type="radio" name="color-index" value="5" title="select palette color 5"/>
+                  </label>
+                  <label>
+                    <input type="radio" name="color-index" value="6" title="select palette color 6"/>
+                  </label>
+                  <label>
+                    <input type="radio" name="color-index" value="7" title="select palette color 7"/>
+                  </label>
                 </div>
               </div>
               <div class="color-select column radio-select" id="color-select" title="select palette">
                 <template id="color-select-template">
                   <div class="horizontal-capsule">
+                    <label>
+                      <input type="radio" name="color-select" value="0,0" title="select palette 0, color 0"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="color-select" value="0,0" title="select palette 0, color 0"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="color-select" value="0,0" title="select palette 0, color 0"/>
+                    </label>
+                    <label>
+                      <input type="radio" name="color-select" value="0,0" title="select palette 0, color 0"/>
+                    </label>
                     <label>
                       <input type="radio" name="color-select" value="0,0" title="select palette 0, color 0"/>
                     </label>
@@ -8889,12 +9229,30 @@ p {
               <input type="checkbox" name="show-palette-window" title="switch palette"/>
               <canvas width="16" height="16"></canvas><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-caret-up-fill" viewBox="0 0 16 16"><path d="m7.247 4.86-4.796 5.481c-.566.647-.106 1.659.753 1.659h9.592a1 1 0 0 0 .753-1.659l-4.796-5.48a1 1 0 0 0-1.506 0z"/></svg>
             </label>
+            <label class="toggle picker-toggle" id="color-select-window-toggle">
+              <input type="checkbox" name="show-color-window" title="switch colors"/>
+              <div class="picker-toggle-preview" id="color-preview-container">
+                <canvas width="16" height="16"></canvas>
+              </div><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-caret-up-fill" viewBox="0 0 16 16"><path d="m7.247 4.86-4.796 5.481c-.566.647-.106 1.659.753 1.659h9.592a1 1 0 0 0 .753-1.659l-4.796-5.48a1 1 0 0 0-1.506 0z"/></svg>
+            </label>
+            <div class="horizontal-capsule radio-select" id="draw-room-color-mode">
+              <label>
+                <input type="radio" name="room-color-mode" value="fg" title="paint foreground color"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-front" viewBox="0 0 16 16">
+  <path d="M0 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2H2a2 2 0 0 1-2-2V2zm5 10v2a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2v5a2 2 0 0 1-2 2H5z"/>
+</svg>
+              </label>
+              <label>
+                <input type="radio" name="room-color-mode" value="bg" title="paint background color"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-back" viewBox="0 0 16 16">
+  <path d="M0 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2H2a2 2 0 0 1-2-2V2zm2-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H2z"/>
+</svg>
+              </label>
+            </div>
             <div class="horizontal-capsule" id="room-events-toolbar" hidden="hidden">
               <button name="copy-event" title="copy event"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13 0H6a2 2 0 0 0-2 2 2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2 2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm0 13V4a2 2 0 0 0-2-2H5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1zM3 4a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4z"/></svg></button>
               <button name="paste-event" title="paste event"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 11a1 1 0 1 1 2 0v1a1 1 0 1 1-2 0v-1zm6-4a1 1 0 1 1 2 0v5a1 1 0 1 1-2 0V7zM7 9a1 1 0 0 1 2 0v3a1 1 0 1 1-2 0V9z"/><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg></button>
               <button name="delete-event" title="delete event"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
             </div>
-            <label class="toggle" id="highlight-toggle">
+            <label class="toggle" id="highlight-toggle" hidden="hidden">
               <input type="checkbox" name="highlight" title="highlight"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M7.657 6.247c.11-.33.576-.33.686 0l.645 1.937a2.89 2.89 0 0 0 1.829 1.828l1.936.645c.33.11.33.576 0 .686l-1.937.645a2.89 2.89 0 0 0-1.828 1.829l-.645 1.936a.361.361 0 0 1-.686 0l-.645-1.937a2.89 2.89 0 0 0-1.828-1.828l-1.937-.645a.361.361 0 0 1 0-.686l1.937-.645a2.89 2.89 0 0 0 1.828-1.828l.645-1.937zM3.794 1.148a.217.217 0 0 1 .412 0l.387 1.162c.173.518.579.924 1.097 1.097l1.162.387a.217.217 0 0 1 0 .412l-1.162.387A1.734 1.734 0 0 0 4.593 5.69l-.387 1.162a.217.217 0 0 1-.412 0L3.407 5.69A1.734 1.734 0 0 0 2.31 4.593l-1.162-.387a.217.217 0 0 1 0-.412l1.162-.387A1.734 1.734 0 0 0 3.407 2.31l.387-1.162zM10.863.099a.145.145 0 0 1 .274 0l.258.774c.115.346.386.617.732.732l.774.258a.145.145 0 0 1 0 .274l-.774.258a1.156 1.156 0 0 0-.732.732l-.258.774a.145.145 0 0 1-.274 0l-.258-.774a1.156 1.156 0 0 0-.732-.732L9.1 2.137a.145.145 0 0 1 0-.274l.774-.258c.346-.115.617-.386.732-.732L10.863.1z"/></svg>
             </label>
             <label class="toggle" id="picker-toggle">
@@ -8927,24 +9285,6 @@ p {
         [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
         [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
         [0, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-      ],
-      "highmap": [
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
       ],
@@ -9062,24 +9402,6 @@ p {
         }]
       }],
       "backmap": [
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-      ],
-      "foremap": [
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -9089,13 +9411,31 @@ p {
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+      ],
+      "foremap": [
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
       ]
     }, {
       "id": 1,
@@ -9119,31 +9459,13 @@ p {
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
       ],
       "backmap": [
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-      ],
-      "foremap": [
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        [1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -9153,6 +9475,24 @@ p {
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+      ],
+      "foremap": [
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
       ],
       "wallmap": [
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -9191,14 +9531,14 @@ p {
       }]
     }],
     "palettes": [
-      ["#3c6fad", "#d8d4dd", "#ff8e9e"],
-      ["#192b33", "#201f7f", "#958fbf"],
-      ["#2f1933", "#7f1f24", "#bf908f"],
-      ["#251933", "#5f1f7f", "#bf8fac"],
-      ["#193233", "#451f7f", "#bf8faf"],
-      ["#331920", "#6b7f1f", "#8fbfb0"],
-      ["#332219", "#7f651f", "#bfba8f"],
-      ["#332719", "#547f1f", "#8fbfae"]
+      { "id": 0, "colors": ["#000000", "#3c6fad", "#d8d4dd", "#ff8e9e", "#9d9723", "#11905a", "#505b39", "#2d4814"] },
+      { "id": 1, "colors": ["#000000", "#192b33", "#201f7f", "#958fbf", "#155ebe", "#eb64c3", "#7e2a57", "#6a565b"] },
+      { "id": 2, "colors": ["#000000", "#2f1933", "#7f1f24", "#bf908f", "#5eb574", "#f3fba8", "#9c5f83", "#a9cdd9"] },
+      { "id": 3, "colors": ["#000000", "#251933", "#5f1f7f", "#bf8fac", "#add3c1", "#89ffa0", "#27728b", "#7a5670"] },
+      { "id": 4, "colors": ["#000000", "#193233", "#451f7f", "#bf8faf", "#dcaf57", "#030187", "#6187bc", "#abea5d"] },
+      { "id": 5, "colors": ["#000000", "#331920", "#6b7f1f", "#8fbfb0", "#93fc2b", "#0b598b", "#21de6c", "#1ec19c"] },
+      { "id": 6, "colors": ["#000000", "#332219", "#7f651f", "#bfba8f", "#f57430", "#0a3f3f", "#83c47e", "#f4dba2"] },
+      { "id": 7, "colors": ["#000000", "#332719", "#547f1f", "#8fbfae", "#65b711", "#b35cff", "#d62e51", "#d23542"] }
     ],
     "tileset": "19",
     "tiles": [
