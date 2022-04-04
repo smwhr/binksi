@@ -2136,6 +2136,10 @@ class DialoguePlayback extends EventTarget {
         }
     }
 
+    completed() {
+        return this.showGlyphCount === this.pageGlyphCount;
+    }
+
     moveToNextPage() {
         const nextPage = this.queuedPages.shift();
         this.pagesSeen += 1;
@@ -7057,7 +7061,7 @@ async function makePlayback(font, bundle, story) {
 
     function down(key, code) {
         if (!playback.dialoguePlayback.empty) {
-            if(playback.choiceExpected){
+            if(playback.choiceExpected && playback.dialoguePlayback.completed()){
                 return doChoice(key);
             };
             playback.proceed();
@@ -8894,7 +8898,7 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.5-alpha (2022/03/31)</h2>
+          <h2>binksi -- 0.5-alpha (2022/04/04)</h2>
           <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
           <p>to get started, use <a href="https://github.com/smwhr/binksi">the binksi repo</a> as a template</p>
           <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
