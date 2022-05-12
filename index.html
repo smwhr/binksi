@@ -3181,10 +3181,23 @@ class BipsiPlayback extends EventTarget {
 
             if(paragraphText.length > 0){
                 const matchSpawn = paragraphText.trim().match(/SPAWN_AT\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
+                const matchCutscene = paragraphText.trim().match(/CUTSCENE\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
+
                 if( matchSpawn ){
                     const target = matchSpawn[1];
                     const event = matchSpawn[3] || "is-player";
                     await this.spawnAt(target.trim(), event.trim());
+                }else if( matchCutscene ){
+                    const target = matchCutscene[1];
+                    const field = matchCutscene[3] || "touch";
+                    let targetEvent = findEventByTag(this.data, target);
+                    if(targetEvent){
+                        debugger;
+                        const js_field = oneField(targetEvent, field, "javascript")?.data;
+                        if (js_field !== undefined) {
+                            await this.runJS(targetEvent, js_field);
+                        }
+                    }
                 }else if(tags.includes("TITLE")){
                     await this.title(paragraphText);
                 }else{
@@ -3237,7 +3250,7 @@ class BipsiPlayback extends EventTarget {
                 if(arrowEvent){
                     dialogChoicesTexts.push(`${glyph} ${choice.text}`);
                     choiceEvents.set(arrowEvent,  () => {
-                        console.log(`Making choice ${choice.index}`)
+                        this.log(`> MAKING CHOICE ${choice.index}`);
                         story.ChooseChoiceIndex(choice.index);
                     });
                 }
@@ -3260,7 +3273,7 @@ class BipsiPlayback extends EventTarget {
                     continueStory(EVENT);
                 }
             }
-            console.log(`We have ${choiceEvents.size} events to listen to`)
+            this.log(`> ${choiceEvents.size} CHOICE EVENTS`);
             this.addEventListener("choice", listenToChoice);
         }else{
             this.choiceExpected = false
@@ -3895,7 +3908,11 @@ const SCRIPTING_FUNCTIONS = {
     POST(message, origin="*") {
         postMessageParent(message, origin);
     },
-<<<<<<< HEAD
+
+    async WAIT_INPUT() {
+        return this.PLAYBACK.waitInput();
+    },
+
     //binksi
     SET_INK_VAR(field, value) {
         this.STORY.variablesState.$(field, value);
@@ -3906,11 +3923,6 @@ const SCRIPTING_FUNCTIONS = {
     DIVERT_TO(knot_name) {
         this.STORY.ChoosePathString(knot_name);
         return this.PLAYBACK.continueStory();
-=======
-
-    async WAIT_INPUT() {
-        return this.PLAYBACK.waitInput();
->>>>>>> 8f46b814b834b1076c6cc2e95ffeab2547ee31b6
     }
 }
 
@@ -7256,12 +7268,8 @@ async function start() {
     const story = new inkjs.Story(storyContent);
 
     if (bundle) {
-<<<<<<< HEAD
         PLAYBACK = await makePlayback(font, bundle, story);
-=======
-        PLAYBACK = await makePlayback(font, bundle);
         window.PLAYBACK = PLAYBACK;
->>>>>>> 8f46b814b834b1076c6cc2e95ffeab2547ee31b6
     } else {
         EDITOR = await startEditor(font);
         window.EDITOR = EDITOR;
@@ -8979,13 +8987,11 @@ p {
           <div class="info-action-list"><a class="button" href="https://kool.tools/bipsi/user-guide.pdf" target="_blank" title="open user guide">
                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-question-lg" viewBox="0 0 16 16">
   <path fill-rule="evenodd" d="M4.475 5.458c-.284 0-.514-.237-.47-.517C4.28 3.24 5.576 2 7.825 2c2.25 0 3.767 1.36 3.767 3.215 0 1.344-.665 2.288-1.79 2.973-1.1.659-1.414 1.118-1.414 2.01v.03a.5.5 0 0 1-.5.5h-.77a.5.5 0 0 1-.5-.495l-.003-.2c-.043-1.221.477-2.001 1.645-2.712 1.03-.632 1.397-1.135 1.397-2.028 0-.979-.758-1.698-1.926-1.698-1.009 0-1.71.529-1.938 1.402-.066.254-.278.461-.54.461h-.777ZM7.496 14c.622 0 1.095-.474 1.095-1.09 0-.618-.473-1.092-1.095-1.092-.606 0-1.087.474-1.087 1.091S6.89 14 7.496 14Z"/>
-</svg>binksi user guide</a><a class="button" href="https://github.com/inkle/ink/blob/master/Documentation/WritingWithInk.md" target="_blank" title="writing with Ink">
+</svg>bipsi user guide</a><a class="button" href="https://github.com/inkle/ink/blob/master/Documentation/WritingWithInk.md" target="_blank" title="writing with Ink">
                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-braces" viewBox="0 0 16 16"><path d="M2.114 8.063V7.9c1.005-.102 1.497-.615 1.497-1.6V4.503c0-1.094.39-1.538 1.354-1.538h.273V2h-.376C3.25 2 2.49 2.759 2.49 4.352v1.524c0 1.094-.376 1.456-1.49 1.456v1.299c1.114 0 1.49.362 1.49 1.456v1.524c0 1.593.759 2.352 2.372 2.352h.376v-.964h-.273c-.964 0-1.354-.444-1.354-1.538V9.663c0-.984-.492-1.497-1.497-1.6zM13.886 7.9v.163c-1.005.103-1.497.616-1.497 1.6v1.798c0 1.094-.39 1.538-1.354 1.538h-.273v.964h.376c1.613 0 2.372-.759 2.372-2.352v-1.524c0-1.094.376-1.456 1.49-1.456V7.332c-1.114 0-1.49-.362-1.49-1.456V4.352C13.51 2.759 12.75 2 11.138 2h-.376v.964h.273c.964 0 1.354.444 1.354 1.538V6.3c0 .984.492 1.497 1.497 1.6z"/></svg>writing with Ink</a></div>
-          <div class="info-action-list"><a class="button" href="https://kool.tools/bipsi/user-guide.pdf" target="_blank" title="open user guide">
-               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-question-lg" viewBox="0 0 16 16">
-  <path fill-rule="evenodd" d="M4.475 5.458c-.284 0-.514-.237-.47-.517C4.28 3.24 5.576 2 7.825 2c2.25 0 3.767 1.36 3.767 3.215 0 1.344-.665 2.288-1.79 2.973-1.1.659-1.414 1.118-1.414 2.01v.03a.5.5 0 0 1-.5.5h-.77a.5.5 0 0 1-.5-.495l-.003-.2c-.043-1.221.477-2.001 1.645-2.712 1.03-.632 1.397-1.135 1.397-2.028 0-.979-.758-1.698-1.926-1.698-1.009 0-1.71.529-1.938 1.402-.066.254-.278.461-.54.461h-.777ZM7.496 14c.622 0 1.095-.474 1.095-1.09 0-.618-.473-1.092-1.095-1.092-.606 0-1.087.474-1.087 1.091S6.89 14 7.496 14Z"/>
-</svg>bipsi user guide</a><a class="button" href="https://kool.tools/bipsi/scripting-guide.pdf" target="_blank" title="open scripting guide">
-               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-braces" viewBox="0 0 16 16"><path d="M2.114 8.063V7.9c1.005-.102 1.497-.615 1.497-1.6V4.503c0-1.094.39-1.538 1.354-1.538h.273V2h-.376C3.25 2 2.49 2.759 2.49 4.352v1.524c0 1.094-.376 1.456-1.49 1.456v1.299c1.114 0 1.49.362 1.49 1.456v1.524c0 1.593.759 2.352 2.372 2.352h.376v-.964h-.273c-.964 0-1.354-.444-1.354-1.538V9.663c0-.984-.492-1.497-1.497-1.6zM13.886 7.9v.163c-1.005.103-1.497.616-1.497 1.6v1.798c0 1.094-.39 1.538-1.354 1.538h-.273v.964h.376c1.613 0 2.372-.759 2.372-2.352v-1.524c0-1.094.376-1.456 1.49-1.456V7.332c-1.114 0-1.49-.362-1.49-1.456V4.352C13.51 2.759 12.75 2 11.138 2h-.376v.964h.273c.964 0 1.354.444 1.354 1.538V6.3c0 .984.492 1.497 1.497 1.6z"/></svg>bipsi scripting guide</a></div>
+          <div class="info-action-list"><a class="button" href="https://kool.tools/bipsi/scripting-guide.pdf" target="_blank" title="open scripting guide">
+               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-braces" viewBox="0 0 16 16"><path d="M2.114 8.063V7.9c1.005-.102 1.497-.615 1.497-1.6V4.503c0-1.094.39-1.538 1.354-1.538h.273V2h-.376C3.25 2 2.49 2.759 2.49 4.352v1.524c0 1.094-.376 1.456-1.49 1.456v1.299c1.114 0 1.49.362 1.49 1.456v1.524c0 1.593.759 2.352 2.372 2.352h.376v-.964h-.273c-.964 0-1.354-.444-1.354-1.538V9.663c0-.984-.492-1.497-1.497-1.6zM13.886 7.9v.163c-1.005.103-1.497.616-1.497 1.6v1.798c0 1.094-.39 1.538-1.354 1.538h-.273v.964h.376c1.613 0 2.372-.759 2.372-2.352v-1.524c0-1.094.376-1.456 1.49-1.456V7.332c-1.114 0-1.49-.362-1.49-1.456V4.352C13.51 2.759 12.75 2 11.138 2h-.376v.964h.273c.964 0 1.354.444 1.354 1.538V6.3c0 .984.492 1.497 1.497 1.6z"/></svg>bipsi scripting guide</a><a class="button" href="https://smwhr.github.io/binksi/docs/" target="_blank" title="open user guide">
+               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-braces" viewBox="0 0 16 16"><path d="M2.114 8.063V7.9c1.005-.102 1.497-.615 1.497-1.6V4.503c0-1.094.39-1.538 1.354-1.538h.273V2h-.376C3.25 2 2.49 2.759 2.49 4.352v1.524c0 1.094-.376 1.456-1.49 1.456v1.299c1.114 0 1.49.362 1.49 1.456v1.524c0 1.593.759 2.352 2.372 2.352h.376v-.964h-.273c-.964 0-1.354-.444-1.354-1.538V9.663c0-.984-.492-1.497-1.497-1.6zM13.886 7.9v.163c-1.005.103-1.497.616-1.497 1.6v1.798c0 1.094-.39 1.538-1.354 1.538h-.273v.964h.376c1.613 0 2.372-.759 2.372-2.352v-1.524c0-1.094.376-1.456 1.49-1.456V7.332c-1.114 0-1.49-.362-1.49-1.456V4.352C13.51 2.759 12.75 2 11.138 2h-.376v.964h.273c.964 0 1.354.444 1.354 1.538V6.3c0 .984.492 1.497 1.497 1.6z"/></svg>additional binksi guide</a></div>
         </div>
         <div class="controls-tab-body" id="play-tab-body" hidden="hidden">
           <h2>playtest & publish</h2>
@@ -9397,7 +9403,7 @@ p {
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
-        [0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0],
+        [0, 1, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 1, 0],
         [0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0],
         [0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0],
         [0, 1, 0, 0, 8, 8, 8, 8, 8, 8, 8, 8, 0, 0, 1, 0],
@@ -9445,7 +9451,7 @@ p {
         }]
       }, {
         "id": 9,
-        "position": [9, 7],
+        "position": [6, 5],
         "fields": [{
           "key": "graphic",
           "type": "tile",
@@ -9458,6 +9464,14 @@ p {
           "key": "say",
           "type": "dialogue",
           "data": "hello"
+        }, {
+          "key": "entry",
+          "type": "javascript",
+          "data": "await WALK(EVENT, \"v>>>v\");"
+        }, {
+          "key": "receptionist",
+          "type": "tag",
+          "data": true
         }]
       }, {
         "id": 10,
@@ -9682,7 +9696,7 @@ p {
   }
 }
     </script>
-    <script id="story-embed" type="application/json">{"inkVersion":20,"root":[["^demo ==binksi== game ",{"#":"TITLE"},"\n",{"->":"init"},["done",{"#n":"g-0"}],null],"done",{"init":[["ev","str","^auto: start game","/str","/ev",{"*":".^.c-0","flg":4},{"c-0":["\n","ev","str","^start","/str","/ev",{"->":"front_desk"},null]}],null],"front_desk":[{"temp=":"from"},["^SPAWN_AT(desk-from-","ev",{"VAR?":"from"},"out","/ev","^)","\n",["ev","str","^tag: reception_talk","/str","/ev",{"*":".^.c-0","flg":4},"ev","str","^tag: desk-to-salon","/str","/ev",{"*":".^.c-1","flg":4},"ev","str","^tag: exit-west","/str","/ev",{"*":".^.c-2","flg":4},{"c-0":["\n",{"->t->":"talk_to_receptionist"},{"->":".^.^.^.g-0"},null],"c-1":["\n",["ev","visit",2,"MIN","/ev","ev","du",0,"==","/ev",{"->":".^.s0","c":true},"ev","du",1,"==","/ev",{"->":".^.s1","c":true},"ev","du",2,"==","/ev",{"->":".^.s2","c":true},"nop",{"s0":["pop","^Let's see where this goes",{"->":".^.^.23"},null],"s1":["pop","^Maybe there's something new over there",{"->":".^.^.23"},null],"s2":["pop",{"->":".^.^.23"},null],"#f":5}],"\n","ev","str","^desk","/str","/ev",{"->":"salon"},{"->":".^.^.^.g-0"},null],"c-2":["\n","^You cannot leave west yet","\n",{"->":".^.^.^.g-0"},null],"#n":"opts"}],{"g-0":[{"->":".^.^.opts"},null]}],null],"talk_to_receptionist":[["^Welcome to Binksi Hotel.","\n","^Do you have a room here ?","\n","ev","str","^yes","/str","/ev",{"*":".^.c-0","flg":4},"ev","str","^no","/str","/ev",{"*":".^.c-1","flg":4},{"c-0":["\n",{"->":".^.^.g-0"},null],"c-1":["\n",{"->":".^.^.g-0"},null],"g-0":["^Then why bother me ?","\n","ev","void","/ev","->->",null]}],null],"salon":[{"temp=":"from"},["^SPAWN_AT(salon-from-","ev",{"VAR?":"from"},"out","/ev","^)","\n",["ev","visit",3,"MIN","/ev","ev","du",0,"==","/ev",{"->":".^.s0","c":true},"ev","du",1,"==","/ev",{"->":".^.s1","c":true},"ev","du",2,"==","/ev",{"->":".^.s2","c":true},"ev","du",3,"==","/ev",{"->":".^.s3","c":true},"nop",{"s0":["pop","^Hmmm, there's nothing here...",{"->":".^.^.29"},null],"s1":["pop","^Still nothing, I wonder why I keep coming here",{"->":".^.^.29"},null],"s2":["pop","^I should really stop hoping",{"->":".^.^.29"},null],"s3":["pop",{"->":".^.^.29"},null],"#f":5}],"\n","ev","str","^tag: salon-to-desk","/str","/ev",{"*":".^.c-0","flg":4},{"c-0":["\n","ev","str","^salon","/str","/ev",{"->":"front_desk"},null]}],null]}],"listDefs":{}}</script>
+    <script id="story-embed" type="application/json">{"inkVersion":20,"root":[["^demo ==binksi== game ",{"#":"TITLE"},"\n",{"->":"init"},["done",{"#n":"g-0"}],null],"done",{"init":[["ev","str","^auto: start game","/str","/ev",{"*":".^.c-0","flg":4},{"c-0":["\n","ev","str","^start","/str","/ev",{"->":"front_desk"},null]}],null],"front_desk":[{"temp=":"from"},["^SPAWN_AT(desk-from-","ev",{"VAR?":"from"},"out","/ev","^)","\n","^CUTSCENE(receptionist, entry)","\n",["ev","str","^tag: reception_talk","/str","/ev",{"*":".^.c-0","flg":4},"ev","str","^tag: desk-to-salon","/str","/ev",{"*":".^.c-1","flg":4},"ev","str","^tag: exit-west","/str","/ev",{"*":".^.c-2","flg":4},{"c-0":["\n",{"->t->":"talk_to_receptionist"},{"->":".^.^.^.g-0"},null],"c-1":["\n",["ev","visit",2,"MIN","/ev","ev","du",0,"==","/ev",{"->":".^.s0","c":true},"ev","du",1,"==","/ev",{"->":".^.s1","c":true},"ev","du",2,"==","/ev",{"->":".^.s2","c":true},"nop",{"s0":["pop","^Let's see where this goes",{"->":".^.^.23"},null],"s1":["pop","^Maybe there's something new over there",{"->":".^.^.23"},null],"s2":["pop",{"->":".^.^.23"},null],"#f":5}],"\n","ev","str","^desk","/str","/ev",{"->":"salon"},{"->":".^.^.^.g-0"},null],"c-2":["\n","^You cannot leave west yet","\n",{"->":".^.^.^.g-0"},null],"#n":"opts"}],{"g-0":[{"->":".^.^.opts"},null]}],null],"talk_to_receptionist":[["^Welcome to Binksi Hotel.","\n","^Do you have a room here ?","\n","ev","str","^yes","/str","/ev",{"*":".^.c-0","flg":4},"ev","str","^no","/str","/ev",{"*":".^.c-1","flg":4},{"c-0":["\n",{"->":".^.^.g-0"},null],"c-1":["\n",{"->":".^.^.g-0"},null],"g-0":["^Then why bother me ?","\n","ev","void","/ev","->->",null]}],null],"salon":[{"temp=":"from"},["^SPAWN_AT(salon-from-","ev",{"VAR?":"from"},"out","/ev","^)","\n",["ev","visit",3,"MIN","/ev","ev","du",0,"==","/ev",{"->":".^.s0","c":true},"ev","du",1,"==","/ev",{"->":".^.s1","c":true},"ev","du",2,"==","/ev",{"->":".^.s2","c":true},"ev","du",3,"==","/ev",{"->":".^.s3","c":true},"nop",{"s0":["pop","^Hmmm, there's nothing here...",{"->":".^.^.29"},null],"s1":["pop","^Still nothing, I wonder why I keep coming here",{"->":".^.^.29"},null],"s2":["pop","^I should really stop hoping",{"->":".^.^.29"},null],"s3":["pop",{"->":".^.^.29"},null],"#f":5}],"\n","ev","str","^tag: salon-to-desk","/str","/ev",{"*":".^.c-0","flg":4},{"c-0":["\n","ev","str","^salon","/str","/ev",{"->":"front_desk"},null]}],null]}],"listDefs":{}}</script>
     <script id="font-embed" type="text" data-char-width="6" data-char-height="8" data-runs="0,9786-9787,9829-9830,9827,9824,8226,9688,9675,9689,9794,9792,9834-9835,9788,9658,9668,8597,8252,182,167,9644,8616,8593,8595,8594,8592,8735,8596,9650,9660,32-126,8962,199,252,233,226,228,224,229,231,234,235,232,239,238,236,196-197,201,230,198,244,246,242,251,249,255,214,220,162-163,165,8359,402,225,237,243,250,241,209,170,186,191,8976,172,189,188,161,171,187,9617-9619,9474,9508,9569-9570,9558,9557,9571,9553,9559,9565,9564,9563,9488,9492,9524,9516,9500,9472,9532,9566-9567,9562,9556,9577,9574,9568,9552,9580,9575-9576,9572-9573,9561,9560,9554-9555,9579,9578,9496,9484,9608,9604,9612,9616,9600,945,223,915,960,931,963,181,964,934,920,937,948,8734,966,949,8745,8801,177,8805,8804,8992,8993,247,8776,176,8729,183,8730,8319,178,9632,160">data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAACACAMAAADDApyIAAAABlBMVEUAAAD///+l2Z/dAAAAAXRSTlMAQObYZgAABWtJREFUaN7tWkuW2zAMI+5/6S5qSwQIUnYy01XdNi91LEGk+IUVcV0A1iddcgPAeih/X2PXb3UaxDUAaVYe1gAAuGa4Zgbi/rPGpZsZRiW7JsU95/WRAOLvWLA+sgQ3wF77urP+XQu4vl2fAvh30QvgFogBBNICIFiWOElg1l72IKsIsZWJtQWyB6xrqBWVPaDv1/+xBSi2+PzqzbQfQktdUgepKz8K5x9m0m3E2zNuhYO3vVdjAUvGm72EbCYDZHWSRQUtSwF4KcsqVEUhXl1WnSGRFlEAnAQJhyQw+s2GfPucSkl7QM53+0eor8pODACNFcUOAJg3luT75vpuhu3i7MKxYk322MBHq7sAkGPL3ovgjCJWP3vxPV3sLcqS0DyoMQrn+Y03dgpBWD9wW42YAJL1cfJ7LAGmgLnC0vJoC1BSTUr5aOFywMo5rDiMrMt//7ELB/dBrY7AMccFss4mc3jfithlxzIjyFDIM5NN3jPLloCMHzo/A0AdEIC6I+etFLqXiiTYLRUxAHzo2YqAqgJ7K7awOTRj2mTQB8pAWIXor1yl2DrKZzQeQfaQaqtSBnln/E0PsBLw91oOL/tBNdxiY2r7/jPc4GTWkpM4qVz20kwKk4UdQDaQ/Ce0ggMAWW9WV9TC667Ui5RQCcByxCMVwUhQwkn3wxuAaR6yjdaKdiYSC+GxcFb06xcGP8DJiGtuqFm6Gyxabp6xcVI67WZjHQAoT8jc0JxBKuqqaANAtb0JbT7RpfVFtCqClHkwXV4LUKI/59XStRkAX9BsdkTtt9RuRfu9Ff0r+9ceEUPxbdvqyFVlX4qeATClrxNA0rV2zijZGJSwuQNKvS/g9uMUEnLs1MoqKHijult0+SBJ0AIgzgBzPiAVHSSIUYJ5D1gCJPfMd4Si+q5P/ldeBcPZPeOUXlV2ZVeyqu8NLDm5BEFSPYA+XK8KjEsMSBs5AVQzzfuCrkAPtn2oheeBGBJOD8A5AMwCQYqdSUUSfyAxpLbaUSKPadJOvecbw3zMHAgnlMjNqHHR/CodmXCPT9aOB64Pk04gST8Kk1prUPOrYXsQ2tlJ/HOfQ/1cpg5URxOLqp+mJWnYSFu+49grhPQ/vuIyTBgM5+wkMIwMarsMOFLlc+N/OZCzWHq5QS86NAKmaZDaQlsHfSYNxUXK0tTLhxCwRNUMf6NkBYShRJEbubd/Q6kHazKQxPMOQCQAbHRqAZByA1oVsQ6YZVs5GY4LojqsMkW6akm+n9r08xdonemgePjchL1LW7WpRTNad3tmfsM+WrYO+3LECWRBujnEh9WSVjP5Ci3QYoVaRW+g/F7TNMPaRQMiAYwEEA8wb/+HLqylW9jq1ZUstyJ1PeLnuNI3rOo+jWBfN40VCZo78Cj+HWTw+QhkThH9HaY9C9s5RJUzK/lEAlCIjFIEKEPaFgqHPcgSYCxrDi8auz0AEN8BnPcgfleCnwDA9OK0mbT6h/v+BgDE0QfSGRfsdIt6/wMJZlqqJdcypr0jLwJkvZMEfX71XhpjFDqUoP8BDAC+KeKTjVCJRTTAquHxFkBNbQB4KwHq1QGYJ8djMOiuVoKxHHk09fcAeHJ9BoDn11sAvL3GTZYibzYm1JNpOBmc1NI4EUPhmLtSpkaWQPpFaUKZflA+tbJcRBEZDhx85EyLF32jwLQn8q84SKA0LJTjo1VzZXIEoDMvMJQTLDECd7bEq4jCX7eBAThixFjRDxHxH5zAgDAlfPK2nH+Atrd68qYHPQHY52HaLC1YVt01A5S3Qq0E+UivvBg9AxBF1LAO+YD1a4BE3qHQ+2yLeqzkDAACwERJiBYf7UHmTeZoWYL8OyuSuP8H7ZUOIucBHAwAAAAASUVORK5CYII=</script>
   </body>
 </html>
