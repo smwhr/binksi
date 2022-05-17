@@ -3446,12 +3446,16 @@ class BipsiPlayback extends EventTarget {
         // the cell the avatar tried to move into but settle for the cell 
         // they're already standing on otherwise
         const [fx, fy] = avatar.position;
-        const [event0] = getEventsAt(room.events, tx, ty, avatar);
-        const [event1] = getEventsAt(room.events, fx, fy, avatar);
-        const event = event0 ?? event1;
+        const events_at_destination = getEventsAt(room.events, tx, ty, avatar);
+        const events_at_position = getEventsAt(room.events, fx, fy, avatar);
+        const events = events_at_destination.length > 0 
+                     ? events_at_destination
+                     : events_at_position
 
-        // if there was such an event, touch it
-        if (event) await this.touch(event);
+        // if there are such events, touch them all
+        await events.forEach(async event => {
+            await this.touch(event);
+        }); 
 
         this.busy = false;
     }
@@ -8977,7 +8981,7 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.5-alpha (2022/05/12)</h2>
+          <h2>binksi -- 0.5-alpha (2022/05/17)</h2>
           <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
           <p>to get started, use <a href="https://github.com/smwhr/binksi">the binksi repo</a> as a template</p>
           <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
