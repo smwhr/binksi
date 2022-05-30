@@ -3112,6 +3112,7 @@ class BipsiPlayback extends EventTarget {
 
     async restart() {
         this.clear();
+        this.story.ResetState();
         await this.stateManager.copyFrom(this.stateBackup);
         this.start();
     }
@@ -8984,7 +8985,7 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.5-alpha (2022/05/18)</h2>
+          <h2>binksi -- 0.5-alpha (2022/05/30)</h2>
           <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
           <p>to get started, use <a href="https://github.com/smwhr/binksi">the binksi repo</a> as a template</p>
           <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
