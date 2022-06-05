@@ -2355,7 +2355,7 @@ function makeTileToFrameMap(tiles, frame) {
     /** @type {[number, number][]} */
     return new Map(tiles.map((tile) => [
         tile.id, 
-        tile.frames[frame] ?? tile.frames[0],
+        tile.frames[frame % tile.frames.length],
     ]));
 }
 
@@ -2841,23 +2841,23 @@ if (color) {
 `;
 
 const BEHAVIOUR_IMAGES = `
-let background = FIELD_OR_LIBRARY("background");
-if (background) {
-    SHOW_IMAGE("BACKGROUND", background, 1, 0, 0);
+let backgrounds = FIELDS_OR_LIBRARY("background");
+if (backgrounds) {
+    SHOW_IMAGE("BACKGROUND", backgrounds, 1, 0, 0);
 } else if (IS_TAGGED(EVENT, "clear-background")) {
     HIDE_IMAGE("BACKGROUND");
 }
 
-let foreground = FIELD_OR_LIBRARY("foreground");
-if (foreground) {
-    SHOW_IMAGE("FOREGROUND", foreground, 2, 0, 0);
+let foregrounds = FIELD_OR_LIBRARY("foreground");
+if (foregrounds) {
+    SHOW_IMAGE("FOREGROUND", foregrounds, 2, 0, 0);
 } else if (IS_TAGGED(EVENT, "clear-foreground")) {
     HIDE_IMAGE("FOREGROUND");
 }
 
-let overlay = FIELD_OR_LIBRARY("overlay");
-if (overlay) {
-    SHOW_IMAGE("OVERLAY", overlay, 3, 0, 0);
+let overlays = FIELD_OR_LIBRARY("overlay");
+if (overlays) {
+    SHOW_IMAGE("OVERLAY", overlays, 3, 0, 0);
 } else if (IS_TAGGED(EVENT, "clear-overlay")) {
     HIDE_IMAGE("OVERLAY");
 }
@@ -3304,7 +3304,7 @@ class BipsiPlayback extends EventTarget {
         const tileset = this.stateManager.resources.get(this.data.tileset);
 
         // find current animation frame for each tile
-        frame = frame ?? this.frameCount % 2;
+        frame = frame ?? this.frameCount;
         const tileToFrame = makeTileToFrameMap(this.data.tiles, frame);
 
         // sort images
@@ -3317,11 +3317,11 @@ class BipsiPlayback extends EventTarget {
 
         fillRendering2D(this.rendering);
         // fillRendering2D(TEMP_ROOM, background);
-        images_below_all.forEach(({ image, x, y }) => TEMP_ROOM.drawImage(image, x, y));
+        images_below_all.forEach(({ image, x, y }) => TEMP_ROOM.drawImage(image[frame % image.length], x, y));
         drawTilemapLayer(TEMP_ROOM, tileset, tileToFrame, palette, room);
-        images_below_events.forEach(({ image, x, y }) => TEMP_ROOM.drawImage(image, x, y));
+        images_below_events.forEach(({ image, x, y }) => TEMP_ROOM.drawImage(image[frame % image.length], x, y));
         drawEventLayer(TEMP_ROOM, tileset, tileToFrame, palette, room.events);
-        images_above_events.forEach(({ image, x, y }) => TEMP_ROOM.drawImage(image, x, y));
+        images_above_events.forEach(({ image, x, y }) => TEMP_ROOM.drawImage(image[frame % image.length], x, y));
 
         // upscale tilemaps to display area
         this.rendering.drawImage(TEMP_ROOM.canvas, 0, 0, 256, 256);
@@ -3338,7 +3338,7 @@ class BipsiPlayback extends EventTarget {
         }
         
         fillRendering2D(TEMP_ROOM);
-        images_above_all.forEach(({ image, x, y }) => TEMP_ROOM.drawImage(image, x, y));
+        images_above_all.forEach(({ image, x, y }) => TEMP_ROOM.drawImage(image[frame % image.length], x, y));
         this.rendering.drawImage(TEMP_ROOM.canvas, 0, 0, 256, 256);
 
         if (this.ended) {
@@ -3542,9 +3542,13 @@ class BipsiPlayback extends EventTarget {
         this.background = image;
     }
     
-    async showImage(imageID, fileID, layer, x, y) {
-        const image = this.getFileImageElement(fileID);
-        this.images.set(imageID, { image, layer, x, y });
+    async showImage(imageID, fileIDs, layer, x, y) {
+        if (typeof fileIDs === "string") {
+            fileIDs = [fileIDs];
+        }
+
+        const images = fileIDs.map((fileID) => this.getFileImageElement(fileID));
+        this.images.set(imageID, { image: images, layer, x, y });
     }
 
     hideImage(imageID) {
@@ -3788,6 +3792,19 @@ const SCRIPTING_FUNCTIONS = {
         return file;
     },
 
+    FIELDS_OR_LIBRARY(field, event=this.EVENT) {
+        let files = FIELDS(event, field, "file");
+        let names = FIELDS(event, field, "text");
+
+        if (!files && names && this.LIBRARY) {
+            files = names.map((name) => FIELD(this.LIBRARY, name, "file"));
+        } else if (!files && this.LIBRARY) {
+            files = FIELDS(this.LIBRARY, field, "file");
+        }
+
+        return files;
+    },
+
     DO_STANDARD() { 
         return standardEventTouch(this.PLAYBACK, this.EVENT); 
     },
@@ -3852,8 +3869,8 @@ const SCRIPTING_FUNCTIONS = {
             } else {
                 let [x, y] = event.position;
                 const [dx, dy] = WALK_DIRECTIONS[dir];
-                x = Math.max(0, Math.min(15, x + dx));
-                y = Math.max(0, Math.min(15, y + dy));
+                x = Math.max(0, Math.min(ROOM_SIZE - 1, x + dx));
+                y = Math.max(0, Math.min(ROOM_SIZE - 1, y + dy));
                 event.position = [x, y];
                 await sleep(delay * 1000);
             }
@@ -4075,9 +4092,14 @@ function recordFrames(playback) {
  * @returns {maker.ProjectBundle<BipsiDataProject>}
  */
 function makeBlankBundle() {
+    const tileset = createRendering2D(TILE_PX, TILE_PX);
+    tileset.fillStyle = "white";
+    tileset.fillRect(1, 1, TILE_PX-2, TILE_PX-2);
+    const data = tileset.canvas.toDataURL();
+
     return {
         project: makeBlankProject(),
-        resources: { "1": { type: "canvas-datauri", data: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAAXNSR0IArs4c6QAAAAtJREFUCJljYGAAAAADAAGgpqPUAAAAAElFTkSuQmCC" } },
+        resources: { "1": { type: "canvas-datauri", data } },
     };
 }
 
@@ -4085,14 +4107,27 @@ function makeBlankBundle() {
  * @returns {BipsiDataProject}
  */
 function makeBlankProject() {
+    const room = makeBlankRoom(1, 0);
+    const player = { 
+        id: 1, 
+        position: [Math.floor(ROOM_SIZE / 2), Math.floor(ROOM_SIZE / 2)], 
+        fields: COPY(EVENT_TEMPLATES.player),
+    };
+    room.events.push(player);
+
     return {
-        rooms: [makeBlankRoom(1, 0)],
+        rooms: [room],
         palettes: [makeBlankPalette(0)],
         tileset: "1",
         tiles: [{ id: 1, frames: [0] }],
     }
 }
 
+/**
+ * @param {number} id
+ * @param {number} palette
+ * @returns {BipsiDataRoom}
+ */
 function makeBlankRoom(id, palette) {
     return {
         id,
@@ -4726,8 +4761,8 @@ class EventEditor {
 
         this.positionSelect.addEventListener("click", (event) => {
             const { x, y } = mouseEventToCanvasPixelCoords(this.positionSelect, event);
-            const tx = Math.floor(x / 8);
-            const ty = Math.floor(y / 8);
+            const tx = Math.floor(x / TILE_PX);
+            const ty = Math.floor(y / TILE_PX);
             this.editor.stateManager.makeChange(async (data) => {
                 const { field } = this.getSelections(data);
                 field.data.room = this.editor.fieldRoomSelect.select.valueAsNumber;
@@ -5163,6 +5198,9 @@ class BipsiEditor extends EventTarget {
         this.moveToRoomSelect = new RoomSelect("move-to-window-room-select", ONE("#move-to-window-room-template"));
         this.moveToPositionSelect = ONE("#move-to-window-position");
         this.moveToPositionRendering = this.moveToPositionSelect.getContext("2d");
+
+        this.moveToPositionSelect.width = ROOM_PX;
+        this.moveToPositionSelect.height = ROOM_PX;
         
         this.moveToWindow = ONE("#move-to-window");
         this.showMoveTo = ui.toggle("show-move-to-debug");
@@ -5614,8 +5652,8 @@ class BipsiEditor extends EventTarget {
                     this.stateManager.makeCheckpoint();
                 }
 
-                const x = Math.max(0, Math.min(x1, 15));
-                const y = Math.max(0, Math.min(y1, 15));
+                const x = Math.max(0, Math.min(x1, ROOM_SIZE - 1));
+                const y = Math.max(0, Math.min(y1, ROOM_SIZE - 1));
                 const existing = getEventsAt(room.events, x, y)[0];
 
                 if (event_ && !existing) {
@@ -6526,9 +6564,14 @@ class BipsiEditor extends EventTarget {
 
     async importProject() {
         // ask the browser to provide a file
-        const [file] = await maker.pickFiles("text/html");
+        const [file] = await maker.pickFiles(".html,.json");
         // read the file and turn it into an html page
         const text = await maker.textFromFile(file);
+
+        if (file.name.endsWith(".json")) {
+            return await this.loadBundle(JSON.parse(text));
+        }
+
         const html = await maker.htmlFromText(text);
         // extract the bundle from the imported page
         const bundle = maker.bundleFromHTML(html);
@@ -6559,8 +6602,8 @@ class BipsiEditor extends EventTarget {
     } 
 
     async resetProject() {
-        // open the default project in the editor
-        await this.loadBundle(maker.bundleFromHTML(document, "#editor-embed"));
+        // load a blank project
+        await this.loadBundle(makeBlankBundle());
     }
     
     /**
@@ -8985,7 +9028,7 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.5-alpha (2022/05/30)</h2>
+          <h2>binksi -- 0.5-alpha (2022/06/05)</h2>
           <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
           <p>to get started, use <a href="https://github.com/smwhr/binksi">the binksi repo</a> as a template</p>
           <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
@@ -9024,18 +9067,15 @@ p {
 </svg>import ink story
             </button>
             <button name="reset" title="reset project to default">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>reset project</button>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>clear project</button>
           </div>
-          <h3>publish project</h3>
+          <h3>export project</h3>
           <div class="info-action-list">
             <button name="export" title="export as webpage">
                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-box-seam" viewBox="0 0 16 16">
   <path d="M8.186 1.113a.5.5 0 0 0-.372 0L1.846 3.5l2.404.961L10.404 2l-2.218-.887zm3.564 1.426L5.596 5 8 5.961 14.154 3.5l-2.404-.961zm3.25 1.7-6.5 2.6v7.922l6.5-2.6V4.24zM7.5 14.762V6.838L1 4.239v7.923l6.5 2.6zM7.443.184a1.5 1.5 0 0 1 1.114 0l7.129 2.852A.5.5 0 0 1 16 3.5v8.662a1 1 0 0 1-.629.928l-7.185 2.874a.5.5 0 0 1-.372 0L.63 13.09a1 1 0 0 1-.63-.928V3.5a.5.5 0 0 1 .314-.464L7.443.184z"/>
 </svg>export playable
             </button>
-          </div>
-          <h3>extra</h3>
-          <div class="info-action-list">
             <button name="export-gamedata" title="export data">
                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-binary" viewBox="0 0 16 16">
   <path d="M7.05 11.885c0 1.415-.548 2.206-1.524 2.206C4.548 14.09 4 13.3 4 11.885c0-1.412.548-2.203 1.526-2.203.976 0 1.524.79 1.524 2.203zm-1.524-1.612c-.542 0-.832.563-.832 1.612 0 .088.003.173.006.252l1.559-1.143c-.126-.474-.375-.72-.733-.72zm-.732 2.508c.126.472.372.718.732.718.54 0 .83-.563.83-1.614 0-.085-.003-.17-.006-.25l-1.556 1.146zm6.061.624V14h-3v-.595h1.181V10.5h-.05l-1.136.747v-.688l1.19-.786h.69v3.633h1.125z"/>
