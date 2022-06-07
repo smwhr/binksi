@@ -3322,7 +3322,6 @@ class BipsiPlayback extends EventTarget {
         images.sort((a, b) => a.layer - b.layer);
         const images_below_all    = images.filter((image) => image.layer < 1);
         const images_below_events = images.filter((image) => image.layer >= 1 && image.layer < 2);
-        //debugger;
         const images_above_events = images.filter((image) => image.layer >= 2 && image.layer < 3);
         const images_above_all    = images.filter((image) => image.layer >= 3);
 
@@ -3557,7 +3556,6 @@ class BipsiPlayback extends EventTarget {
         if (typeof fileIDs === "string") {
             fileIDs = [fileIDs];
         }
-        debugger;
         const images = fileIDs.map((fileID) => this.getFileImageElement(fileID));
         this.images.set(imageID, { image: images, layer, x, y });
     }
@@ -4105,46 +4103,100 @@ function recordFrames(playback) {
         this.inkEditor = ONE("#field-story-editor textarea");
         this.inkPlayerContainer = ONE("#story-container");
 
-        this.inkEditor.value = editor.inkSource;
+        this.inkEditor.value = "Loading or source unavailable";
+        this.inkEditor.setAttribute("disabled", "disabled");
         this.story = null;
 
-        this.compile();
+        this.choiceHistory = [];
 
         this.inkEditor.addEventListener("input", () => {
+            editor.inkSource = this.inkEditor.value;
             this.compile()
 
             if(this.story){
                 const jsonBytecode = this.story.ToJson();
                 ONE("#story-embed").innerHTML = jsonBytecode;
-                this.playtest()
+                this.playtest(this.choiceHistory)
             }
         })
     }
 
+    loadSource(inkSource){
+        this.inkEditor.value = inkSource;
+        this.inkEditor.removeAttribute("disabled");
+        this.compile();
+    }
+
     compile(){
+
+        const errors = []
+        const errorHandler = (message, type) =>{
+            var issueRegex = /^(ERROR|WARNING|RUNTIME ERROR|RUNTIME WARNING|TODO): ('([^']+)' )?line (\d+): (.*)/;
+            let issueMatches = message.match(issueRegex);
+    
+            if(issueMatches){
+                errors.push(message)
+            }
+        }
+        const compilerOptions = new inkjs.CompilerOptions(null,[],false, errorHandler);
+
         try{
-            this.story = new inkjs.Compiler(this.inkEditor.value).Compile();
+            this.editor.logTextElement.replaceChildren("> RESTARTING COMPILATION\n");
+            this.story = new inkjs.Compiler(this.inkEditor.value, compilerOptions).Compile();
+            window.postMessage({ type: "log", data: "> COMPILATION SUCCESSFUL" })
         }catch(e){
-            console.error(e)
+            errors.forEach((message) => {
+                console.error(message);
+                window.postMessage({ type: "log", data: message })
+            })
+            this.editor.logWindow.hidden = false;
+            this.editor.showLog.checked = true;
         }
     }
 
-    playtest(){
+    reset(){
+        this.choiceHistory = [];
         if(!this.story) return;
+        this.story.ResetState();
+        
+    }
+
+    playtest(withChoices){
+        if(!this.story) return;
+        if(withChoices === undefined){
+            withChoices = [];
+        }
+
         const story = this.story;
         this.inkPlayerContainer.innerHTML = "";
         story.ResetState();
-        this.continueStory(story);
-
+        this.continueStory(story, withChoices);
     }
 
-    continueStory(story){
+    undo(){
+        if(!this.story) return;
+        const story = this.story;
+        this.choiceHistory.pop();
+        
+        this.inkPlayerContainer.innerHTML = "";
+        story.ResetState();
+        this.continueStory(story, this.choiceHistory);
+    }
+
+    continueStory(story, withChoices){
         const self = this;
+
         while(story.canContinue) {
             var paragraphText = story.Continue();
             var paragraphElement = document.createElement('p');
             paragraphElement.innerHTML = paragraphText;
             self.inkPlayerContainer.appendChild(paragraphElement);
+        }
+
+        if(withChoices && withChoices.length > 0){
+            const choice = withChoices[0];
+            story.ChooseChoiceIndex(choice);
+            return this.continueStory(story, withChoices.slice(1));
         }
 
         story.currentChoices.forEach(function(choice) {
@@ -4169,6 +4221,7 @@ function recordFrames(playback) {
 
                 // Tell the story where to go next
                 story.ChooseChoiceIndex(choice.index);
+                self.choiceHistory.push(choice.index)
 
                 // Aaand loop
                 self.continueStory(story);
@@ -5203,7 +5256,7 @@ class BipsiEditor extends EventTarget {
      * HTML UI so it doesn't really make sense to construct this more than once
      * but a class is easy syntax for wrapping functions and state together 🤷‍♀️
      */
-    constructor(font, inkSource) {
+    constructor(font) {
         super();
 
         // are there changes to warn about losing?
@@ -5360,9 +5413,6 @@ class BipsiEditor extends EventTarget {
         this.tileBrowser = new TileBrowser(this, "tile-select", ONE("#tile-select-template"));
         this.eventTileBrowser = new EventTileBrowser(this, "field-tile-select", ONE("#field-tile-select-template"));
 
-
-        this.loadInkSource(inkSource);
-
         this.tileEditor = new TileEditor(this);
         this.paletteEditor = new PaletteEditor(this);
         this.eventEditor = new EventEditor(this);
@@ -5372,10 +5422,6 @@ class BipsiEditor extends EventTarget {
         this.font = font;
         this.dialoguePreviewPlayer = new DialoguePlayback(256, 256);
         this.dialoguePreviewPlayer.options.font = font;
-
-        
-        
-        
 
         this.time = 0;
         let prev;
@@ -5523,6 +5569,7 @@ class BipsiEditor extends EventTarget {
 
             //ink
             restartInk: ui.action("restart-ink", () => this.storyEditor.playtest()),
+            undoInk: ui.action("undo-ink", () => this.storyEditor.undo()),
         };
 
         // can't undo/redo/paste yet
@@ -6563,8 +6610,7 @@ class BipsiEditor extends EventTarget {
 
     async loadInkSource(inkSource) {
         this.inkSource = inkSource;
-        //this.inkPlayer = new InkPlayer(); //@todo
-        //await this.playtestInk()
+        this.storyEditor.loadSource(inkSource);
     }
 
     async loadStory(story) {
@@ -6749,6 +6795,9 @@ class BipsiEditor extends EventTarget {
         const bundle = await this.stateManager.makeBundle();
         await storage.save(bundle, SAVE_SLOT);
         
+        const inkSource = this.inkSource;
+        await storage.save(inkSource, `${SAVE_SLOT}-story`);
+
         // successful save, no unsaved changes
         this.unsavedChanges = false;
 
@@ -7201,8 +7250,8 @@ class ColorSelect {
     }
 }
     </script>
-    <script>async function startEditor(font, inkSource) {
-    const editor = new BipsiEditor(font, inkSource);
+    <script>async function startEditor(font) {
+    const editor = new BipsiEditor(font);
     await editor.init();
 
     // used to show/hide elements in css
@@ -7215,6 +7264,11 @@ class ColorSelect {
     
     // load bundle and enter editor mode
     await editor.loadBundle(bundle);
+
+    const savedInkSource = await storage.load(`${SAVE_SLOT}-story`).catch(() => undefined);
+    const inkSource = savedInkSource || maker.storyFromHTML(document, "#story-source");
+
+    editor.loadInkSource(inkSource)
 
     // unsaved changes warning
     window.addEventListener("beforeunload", (event) => {
@@ -7429,15 +7483,13 @@ async function start() {
     const bundle = maker.bundleFromHTML(document);
 
     const storyContent = maker.bundleFromHTML(document, "#story-embed");
-    const inkSource = maker.storyFromHTML(document, "#story-source");
-    
 
     if (bundle) {
         const story = new inkjs.Story(storyContent);
         PLAYBACK = await makePlayback(font, bundle, story);
         window.PLAYBACK = PLAYBACK;
     } else {
-        EDITOR = await startEditor(font, inkSource);
+        EDITOR = await startEditor(font);
         window.EDITOR = EDITOR;
     }
 }
@@ -8902,8 +8954,12 @@ p {
     height: 100%;
     display: flex;
 }
+#field-story-editor textarea {
+    font-size: small;
+}
 
 #story-container{
+    font-family: monospace;
     overflow: scroll;
     max-height: 100%;
     height: 100%;
@@ -8943,6 +8999,13 @@ p {
           </div>
           <div class="viewport-toolbar">
             <button class="icon-button" name="restart-ink" title="restart playtest"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-repeat" viewBox="0 0 16 16"><path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/><path fill-rule="evenodd" d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/></svg></button>
+            <button class="icon-button" name="undo-ink" title="undo last choice"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466z"/></svg></button>
+            <label class="toggle picker-toggle">
+              <input type="checkbox" name="show-log" title="show script log"/><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-receipt-cutoff" viewBox="0 0 16 16">
+  <path d="M3 4.5a.5.5 0 0 1 .5-.5h6a.5.5 0 1 1 0 1h-6a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h6a.5.5 0 1 1 0 1h-6a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h6a.5.5 0 1 1 0 1h-6a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 0 1h-6a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 0 1h-6a.5.5 0 0 1-.5-.5zM11.5 4a.5.5 0 0 0 0 1h1a.5.5 0 0 0 0-1h-1zm0 2a.5.5 0 0 0 0 1h1a.5.5 0 0 0 0-1h-1zm0 2a.5.5 0 0 0 0 1h1a.5.5 0 0 0 0-1h-1zm0 2a.5.5 0 0 0 0 1h1a.5.5 0 0 0 0-1h-1zm0 2a.5.5 0 0 0 0 1h1a.5.5 0 0 0 0-1h-1z"/>
+  <path d="M2.354.646a.5.5 0 0 0-.801.13l-.5 1A.5.5 0 0 0 1 2v13H.5a.5.5 0 0 0 0 1h15a.5.5 0 0 0 0-1H15V2a.5.5 0 0 0-.053-.224l-.5-1a.5.5 0 0 0-.8-.13L13 1.293l-.646-.647a.5.5 0 0 0-.708 0L11 1.293l-.646-.647a.5.5 0 0 0-.708 0L9 1.293 8.354.646a.5.5 0 0 0-.708 0L7 1.293 6.354.646a.5.5 0 0 0-.708 0L5 1.293 4.354.646a.5.5 0 0 0-.708 0L3 1.293 2.354.646zm-.217 1.198.51.51a.5.5 0 0 0 .707 0L4 1.707l.646.647a.5.5 0 0 0 .708 0L6 1.707l.646.647a.5.5 0 0 0 .708 0L8 1.707l.646.647a.5.5 0 0 0 .708 0L10 1.707l.646.647a.5.5 0 0 0 .708 0L12 1.707l.646.647a.5.5 0 0 0 .708 0l.509-.51.137.274V15H2V2.118l.137-.274z"/>
+</svg><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-caret-up-fill" viewBox="0 0 16 16"><path d="m7.247 4.86-4.796 5.481c-.566.647-.106 1.659.753 1.659h9.592a1 1 0 0 0 .753-1.659l-4.796-5.48a1 1 0 0 0-1.506 0z"/></svg>
+            </label>
           </div>
         </div>
         <div class="viewport-tab-body" id="play-tab-view" hidden="hidden">
