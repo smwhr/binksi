@@ -1,0 +1,28 @@
+#play-tab-body.controls-tab-body(hidden)
+    h2 playtest & publish
+    h3 switch project
+    .info-action-list
+        button(name="import_html" title="import from webpage")
+            include /icons/upload.svg
+            | import binksi game
+        button(name="import_bipsi" title="import from bipsi")
+            include /icons/upload.svg
+            | import bipsi
+    .info-action-list
+        button(name="clear" title="clear project to default")
+            include /icons/delete.svg
+            | clear project
+        button(name="reset" title="reset project to default")
+            include /icons/refresh.svg
+            | reset to default project
+    h3 export project
+    .info-action-list
+        button(name="export" title="export as webpage") 
+            include /icons/package.svg
+            | export playable
+        button(name="export-gamedata" title="export data") 
+            include /icons/binary.svg
+            | bipsi bundle
+        button(name="export-tileset" title="export tile graphics")
+            include /icons/pencil.svg
+            | export tile graphics

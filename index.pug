@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+html(lang="en" data-remix-generation="0" data-editor-live="https://smwhr.github.io/binksi")
+    head
+        title binksi
+        meta(charset="utf-8")
+        link(rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAALVJREFUOE+lk9sNxSAIQHWE+8EKDuHWruMKJF2hDUYoILY3aT8aRDi8JKePX478EfGM9ACw2BvFzlHDPEQAiHgAwA8Rxb6UknrvcgYAlsVPA042IIiWXQZp3g/f8aPUFd2UrzOiCxckGwBHfstgBiWYBWwmYtSPGbwBdJncBylB10dyrTW11gYz6k8I8BnsGjvt7inwJHbRPHgZIxs8jdNB1of0D0RHXp6kjhDtRLRI8hK/bPQFgQJxEaOqVxQAAAAASUVORK5CYII=")
+        link(rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P" type="text/css")
+        // scripts
+        script
+            include scripts/utility.js
+        script
+            include scripts/maker.js
+        script
+            include scripts/blitsy.js
+        script
+            include scripts/text.js
+        script
+            include scripts/dialogue.js
+        script
+            include scripts/bipsi.js
+        script
+            include scripts/playback.js
+        script
+            include scripts/debug.js
+        script
+            include ../node_modules/inkjs/dist/ink-full.js
+        script
+            include scripts/preload.js
+        script(data-editor-only)
+            include scripts/editor/utility.js
+        script(data-editor-only)
+            include scripts/editor/story-editor.js
+        script(data-editor-only)
+            include scripts/editor/editor.js
+        script(data-editor-only)
+            include scripts/editor/room-select.js
+        script(data-editor-only)
+            include scripts/editor/tile-select.js
+        script(data-editor-only)
+            include scripts/lib/perfect-json.js
+        script(data-editor-only)
+            include scripts/editor/palette-select.js
+        script(data-editor-only)
+            include scripts/editor/color-select.js
+        script
+            include scripts/start.js
+        // styles
+        style
+            include styles/base-style.css
+        style
+            include styles/playback-style.css
+        style(data-editor-only)
+            include styles/editor-style.css
+    body(onload="start()").no-select
+        #player(hidden)
+            canvas#player-canvas(width=256 height=256)
+        #editor(data-editor-only)
+            include editor.pug
+        img#loading-splash(hidden src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEABAMAAACuXLVVAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAGUExURQAAAP/YAFIewjUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACXSURBVHja7dJBCgMhDEDReIN4/8sOkba4mEULogN9DxcusvhEAwAAAAAAAAAAAAAAAABmfRMBAgQ8PCA/czndDwX0QwHRxonaQdT85oCx+szXra1/iW8CIs4G5LSBeoJ6iHF2BLw/QP2BVgG1kI0BN/Otr/VrwHICBAgQIECAAAECBAh4bgAAAAAAAAAAAAAAAAAAfyjiAkM9EgGHYOwCAAAAAElFTkSuQmCC")
+        script#plugins
+        script preload();
+        script#bundle-embed(type="application/json")
+        script#editor-embed(type="application/json" data-editor-only)
+            include ../data/bipsi.json
+        script#story-embed(type="application/json")
+            include ../data/story.ink.json
+        script#story-source(type="text/ink")
+            include ../data/story.ink
+        script#font-embed(type="text" data-char-width="6" data-char-height="8" data-runs="0,9786-9787,9829-9830,9827,9824,8226,9688,9675,9689,9794,9792,9834-9835,9788,9658,9668,8597,8252,182,167,9644,8616,8593,8595,8594,8592,8735,8596,9650,9660,32-126,8962,199,252,233,226,228,224,229,231,234,235,232,239,238,236,196-197,201,230,198,244,246,242,251,249,255,214,220,162-163,165,8359,402,225,237,243,250,241,209,170,186,191,8976,172,189,188,161,171,187,9617-9619,9474,9508,9569-9570,9558,9557,9571,9553,9559,9565,9564,9563,9488,9492,9524,9516,9500,9472,9532,9566-9567,9562,9556,9577,9574,9568,9552,9580,9575-9576,9572-9573,9561,9560,9554-9555,9579,9578,9496,9484,9608,9604,9612,9616,9600,945,223,915,960,931,963,181,964,934,920,937,948,8734,966,949,8745,8801,177,8805,8804,8992,8993,247,8776,176,8729,183,8730,8319,178,9632,160")
+            include fonts/font-ibm437-small.datauri
