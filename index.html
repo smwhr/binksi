@@ -5518,6 +5518,7 @@ class BipsiEditor extends EventTarget {
             import_: ui.action("import_html", () => this.importProject()),
             import_json: ui.action("import_bipsi", () => this.importBundle()),
             exportTileset: ui.action("export-tileset", () => this.exportTileset()),
+            clear: ui.action("clear", () => this.emptyProject()),
             reset: ui.action("reset", () => this.resetProject()),
             update: ui.action("update", () => this.updateEditor()),
 
@@ -6773,6 +6774,13 @@ class BipsiEditor extends EventTarget {
     }
 
     async resetProject() {
+        // clear SAVE_SLOT
+        await storage.delete(SAVE_SLOT)
+        await storage.delete(`${SAVE_SLOT}-story`)
+        document.location.reload()
+    }
+
+    async emptyProject() {
         // load a blank project
         await this.loadBundle(makeBlankBundle());
         this.loadInkSource(`Empty ==binksi== game #TITLE`)
@@ -9258,7 +9266,7 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.9-beta (2022/06/10)</h2>
+          <h2>binksi -- 0.9-beta (2022/06/11)</h2>
           <p>binksi is a bitsi-like tool for making small lo-fi graphical adventure games where a character explores a world and interacts with its inhabitants.</p>
           <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
           <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
@@ -9326,8 +9334,10 @@ p {
             </button>
           </div>
           <div class="info-action-list">
-            <button name="reset" title="reset project to default">
+            <button name="clear" title="clear project to default">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>clear project</button>
+            <button name="reset" title="reset project to default">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-repeat" viewBox="0 0 16 16"><path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/><path fill-rule="evenodd" d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/></svg>reset to default project</button>
           </div>
           <h3>export project</h3>
           <div class="info-action-list">
