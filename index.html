@@ -4108,7 +4108,29 @@ function recordFrames(playback) {
 }
 
     </script>
-    <script data-editor-only="data-editor-only">class StoryEditor {
+    <script data-editor-only="data-editor-only">function debounce(func, wait, immediate) {
+    var timeout;
+  
+    return function executedFunction() {
+      var context = this;
+      var args = arguments;
+          
+      var later = function() {
+        timeout = null;
+        if (!immediate) func.apply(context, args);
+      };
+  
+      var callNow = immediate && !timeout;
+      
+      clearTimeout(timeout);
+  
+      timeout = setTimeout(later, wait);
+      
+      if (callNow) func.apply(context, args);
+    };
+  };
+
+class StoryEditor {
     /**
      * @param {BipsiEditor} editor 
      */
@@ -4123,13 +4145,19 @@ function recordFrames(playback) {
 
         this.choiceHistory = [];
 
-        this.inkEditor.addEventListener("input", () => {
-            editor.inkSource = this.inkEditor.value;
-            this.compile()
+        const self = this;
 
-            if(this.story){
-                this.playtest(this.choiceHistory)
+        var compile = debounce(function() {
+            editor.inkSource = self.inkEditor.value;
+            self.compile()
+
+            if(self.story){
+                self.playtest(self.choiceHistory)
             }
+        }, 250);
+
+        this.inkEditor.addEventListener("input", () => {
+            compile()
         })
     }
 
@@ -4174,7 +4202,7 @@ function recordFrames(playback) {
         this.choiceHistory = [];
         if(!this.story) return;
         this.story.ResetState();
-        
+        this.playtest();
     }
 
     playtest(withChoices){
@@ -5583,7 +5611,7 @@ class BipsiEditor extends EventTarget {
             randomiseColor: ui.action("randomise-color", () => this.randomiseSelectedColor()),
 
             //ink
-            restartInk: ui.action("restart-ink", () => this.storyEditor.playtest()),
+            restartInk: ui.action("restart-ink", () => this.storyEditor.reset()),
             undoInk: ui.action("undo-ink", () => this.storyEditor.undo()),
         };
 
@@ -9275,7 +9303,7 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.9.1-beta (2022/06/14)</h2>
+          <h2>binksi -- 0.9.1-beta (2022/06/15)</h2>
           <p>binksi is a bitsi-like tool for making small lo-fi graphical adventure games where a character explores a world and interacts with its inhabitants.</p>
           <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
           <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
