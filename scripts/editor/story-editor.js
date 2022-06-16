@@ -1,31 +1,64 @@
+function debounce(func, wait, immediate) {
+    var timeout;
+  
+    return function executedFunction() {
+      var context = this;
+      var args = arguments;
+          
+      var later = function() {
+        timeout = null;
+        if (!immediate) func.apply(context, args);
+      };
+  
+      var callNow = immediate && !timeout;
+      
+      clearTimeout(timeout);
+  
+      timeout = setTimeout(later, wait);
+      
+      if (callNow) func.apply(context, args);
+    };
+  };
+
 class StoryEditor {
     /**
      * @param {BipsiEditor} editor 
      */
     constructor(editor) {
         this.editor = editor;
-        this.inkEditor = ONE("#field-story-editor textarea");
         this.inkPlayerContainer = ONE("#story-container");
 
-        this.inkEditor.value = "Loading or source unavailable";
-        this.inkEditor.setAttribute("disabled", "disabled");
+        this.inkEditor = ace.edit("field-story-editor");
+        this.inkEditor.setTheme("ace/theme/monokai");
+        this.inkEditor.session.setMode("ace/mode/ink");
+        this.inkEditor.session.setUseWrapMode(true);
+        
+        this.inkEditor.setReadOnly(true);
+
+        this.inkEditor.setValue("Loading or source unavailable");
         this.story = null;
 
         this.choiceHistory = [];
 
-        this.inkEditor.addEventListener("input", () => {
-            editor.inkSource = this.inkEditor.value;
-            this.compile()
+        const self = this;
 
-            if(this.story){
-                this.playtest(this.choiceHistory)
+        var compile = debounce(function() {
+            editor.inkSource = self.inkEditor.getValue();
+            self.compile()
+
+            if(self.story){
+                self.playtest(self.choiceHistory)
             }
-        })
+        }, 100);
+
+        this.inkEditor.session.on('change', function(delta) {
+            compile()
+        });
     }
 
     loadSource(inkSource){
-        this.inkEditor.value = inkSource;
-        this.inkEditor.removeAttribute("disabled");
+        this.inkEditor.setValue(inkSource, -1);
+        this.inkEditor.setReadOnly(false);
         this.compile();
     }
 
@@ -44,7 +77,7 @@ class StoryEditor {
 
         try{
             this.editor.logTextElement.replaceChildren("> RESTARTING COMPILATION\n");
-            this.story = new inkjs.Compiler(this.inkEditor.value, compilerOptions).Compile();
+            this.story = new inkjs.Compiler(this.inkEditor.getValue(), compilerOptions).Compile();
             window.postMessage({ type: "log", data: "> COMPILATION SUCCESSFUL" })
 
             const jsonBytecode = this.story.ToJson();
@@ -64,7 +97,7 @@ class StoryEditor {
         this.choiceHistory = [];
         if(!this.story) return;
         this.story.ResetState();
-        
+        this.playtest();
     }
 
     playtest(withChoices){
