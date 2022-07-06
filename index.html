@@ -3545,10 +3545,9 @@ class BipsiPlayback extends EventTarget {
     }
 
     playMusic(src) {
-        const playing = !this.music.paused;
         this.music.src = src;
         this.autoplay = true;
-        if (playing) this.music.play();
+        this.music.play();
     }
 
     stopMusic() {
@@ -5164,10 +5163,10 @@ function generateGrid(width, height, gap) {
 }
 
 const TILE_ZOOM = 20;
-const ROOM_ZOOM = 16;
+const ROOM_ZOOM = 2;
 
 const TILE_GRID = generateGrid(TILE_ZOOM * TILE_PX, TILE_ZOOM * TILE_PX, TILE_ZOOM);
-const ROOM_GRID = generateGrid(ROOM_ZOOM * ROOM_SIZE, ROOM_ZOOM * ROOM_SIZE, ROOM_ZOOM);
+const ROOM_GRID = generateGrid(ROOM_PX * ROOM_ZOOM, ROOM_PX * ROOM_ZOOM, TILE_PX * ROOM_ZOOM);
 
 const TILE_SELECT_ZOOM = 5;
 
@@ -7097,7 +7096,12 @@ class BipsiEditor extends EventTarget {
 
             this.dialoguePreviewPlayer.options.anchorY = top ? 0 : 1;
             this.dialoguePreviewPlayer.render();
-            this.renderings.tileMapPaint.drawImage(this.dialoguePreviewPlayer.dialogueRendering.canvas, 0, 0);
+            this.renderings.tileMapPaint.drawImage(
+                this.dialoguePreviewPlayer.dialogueRendering.canvas, 
+                0, 0,
+                this.renderings.tileMapPaint.canvas.width,    
+                this.renderings.tileMapPaint.canvas.height,
+            );
         }
     }
 
@@ -8366,7 +8370,7 @@ async function start() {
     </script>
     <!-- styles-->
     <style>
-/* prevent weird highlights https://stackoverflow.com/questions/21003535/ */
+/* prevent weird touch highlights https://stackoverflow.com/questions/21003535/ */
 .no-select {
     -webkit-tap-highlight-color: transparent;
     -webkit-touch-callout: none;
@@ -10156,8 +10160,8 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.9.2-beta (2022/06/16)</h2>
-          <p>binksi is a bitsi-like tool for making small lo-fi graphical adventure games where a character explores a world and interacts with its inhabitants.</p>
+          <h2>binksi -- 0.9.2-beta (2022/07/06)</h2>
+          <p>binksi is a bitsy-like tool for making small lo-fi graphical adventure games where a character explores a world and interacts with its inhabitants.</p>
           <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
           <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
           <h3>guides</h3>
