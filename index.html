@@ -3185,10 +3185,20 @@ class BipsiPlayback extends EventTarget {
         }
     }
 
+    getSayStyle(character, style){
+        const characterEvent = findEventByTag(this.data, character);
+        if(characterEvent){
+            return  oneField(characterEvent, style, "json")?.data
+                     || {}
+            
+        }
+        return {}
+    }
+
     async continueStory(EVENT){
         const story = this.story;
         const AVATAR = findEventByTag(this.data, "is-player");
-        const sayStyle = oneField(EVENT, "say-style", "json")?.data 
+        let sayStyle = oneField(EVENT, "say-style", "json")?.data 
                         || oneField(AVATAR, "say-style", "json")?.data 
                         || {};
 
@@ -3218,6 +3228,13 @@ class BipsiPlayback extends EventTarget {
                 }else if(tags.includes("TITLE")){
                     await this.title(paragraphText);
                 }else{
+                    const adhocSayStyle = tags.find(t => t.match(/say-style\s*:\s*[a-zA-Z0-9]*-[a-zA-Z0-9]*/))
+                    if(adhocSayStyle){
+                        const matchSayStyle = adhocSayStyle.match(/say-style\s*:\s*([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/);
+                        const character = matchSayStyle[1];
+                        const sentiment = matchSayStyle[2];
+                        sayStyle = this.getSayStyle(character, sentiment)
+                    }
                     
                     const portrait = tags.find(t => t.match(/[a-zA-Z0-9]*-[a-zA-Z0-9]*/))
                     if(portrait){
@@ -10160,7 +10177,7 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.9.2-beta (2022/07/06)</h2>
+          <h2>binksi -- 0.9.2-beta (2022/07/19)</h2>
           <p>binksi is a bitsy-like tool for making small lo-fi graphical adventure games where a character explores a world and interacts with its inhabitants.</p>
           <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
           <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
