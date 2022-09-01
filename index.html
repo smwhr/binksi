@@ -2850,6 +2850,13 @@ if (color) {
 `;
 
 const BEHAVIOUR_IMAGES = `
+let backdrops = FIELD_OR_LIBRARY("backdrop");
+if (backdrops) {
+    SHOW_IMAGE("BACKDROP", backdrops, 0, 0, 0);
+} else if (IS_TAGGED(EVENT, "clear-backdrop")) {
+    HIDE_IMAGE("BACKDROP");
+}
+
 let backgrounds = FIELDS_OR_LIBRARY("background");
 if (backgrounds.length > 0) {
     SHOW_IMAGE("BACKGROUND", backgrounds, 1, 0, 0);
@@ -10179,7 +10186,7 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.9.2-beta (2022/07/20)</h2>
+          <h2>binksi -- 0.9.2-beta (2022/09/01)</h2>
           <p>binksi is a bitsy-like tool for making small lo-fi graphical adventure games where a character explores a world and interacts with its inhabitants.</p>
           <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
           <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
