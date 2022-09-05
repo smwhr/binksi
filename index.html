@@ -1938,6 +1938,8 @@ function find(array, start, step, predicate) {
  * @property {string} backgroundColor
  * @property {string} panelColor
  * @property {string} textColor
+ * @property {string} portraitX
+ * @property {string} portraitY
  */
 
 const DIALOGUE_DEFAULTS = {
@@ -3182,7 +3184,7 @@ class BipsiPlayback extends EventTarget {
             const sentimentImageId =  oneField(characterEvent, sentiment, "file")?.data
                                    || oneField(characterEvent, "neutral", "file")?.data
             if(sentimentImageId){
-                await this.showImage("portrait", sentimentImageId, 3, 104, 102);
+                await this.showImage("portrait", sentimentImageId, 3, options.portraitX || 104, options.portraitY || 102);
                 portraitShown = true;
             }
         }
@@ -10186,7 +10188,7 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.9.2-beta (2022/09/01)</h2>
+          <h2>binksi -- 0.9.2-beta (2022/09/05)</h2>
           <p>binksi is a bitsy-like tool for making small lo-fi graphical adventure games where a character explores a world and interacts with its inhabitants.</p>
           <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
           <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
