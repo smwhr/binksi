@@ -3585,6 +3585,7 @@ class BipsiPlayback extends EventTarget {
 
     stopMusic() {
         this.music.pause();
+        this.music.removeAttribute("src");
         this.autoplay = false;
     }
 
@@ -3593,6 +3594,8 @@ class BipsiPlayback extends EventTarget {
     }
     
     async showImage(imageID, fileIDs, layer, x, y) {
+        console.log(imageID, fileIDs, layer, x, y)
+
         if (typeof fileIDs === "string") {
             fileIDs = [fileIDs];
         }
@@ -3853,7 +3856,7 @@ const SCRIPTING_FUNCTIONS = {
         if(files.length > 0) return files;
 
         if (names && this.LIBRARY) {
-            files = names.map((name) => FIELD(this.LIBRARY, name, "file"))//.filter(Boolean);
+            files = names.map((name) => FIELD(this.LIBRARY, name, "file"))
         } else if (this.LIBRARY) {
             files = FIELDS(this.LIBRARY, field, "file");
         }
@@ -10193,7 +10196,7 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.9.2-beta (2022/09/05)</h2>
+          <h2>binksi -- 0.9.2-beta (2022/09/14)</h2>
           <p>binksi is a bitsy-like tool for making small lo-fi graphical adventure games where a character explores a world and interacts with its inhabitants.</p>
           <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
           <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
