@@ -221,6 +221,13 @@ if (color) {
 `;
 
 const BEHAVIOUR_IMAGES = `
+let backdrops = FIELDS_OR_LIBRARY("backdrop");
+if (backdrops.length) {
+    SHOW_IMAGE("BACKDROP", backdrops, 0, 0, 0);
+} else if (IS_TAGGED(EVENT, "clear-backdrop")) {
+    HIDE_IMAGE("BACKDROP");
+}
+
 let backgrounds = FIELDS_OR_LIBRARY("background");
 if (backgrounds.length > 0) {
     SHOW_IMAGE("BACKGROUND", backgrounds, 1, 0, 0);
@@ -539,6 +546,24 @@ class BipsiPlayback extends EventTarget {
         }
     }
 
+    async showPortrait(character, sentiment, options){
+        const characterEvent = findEventByTag(this.data, character);
+        if(characterEvent){
+            const sentimentImageId =  oneField(characterEvent, sentiment, "file")?.data
+                                   || oneField(characterEvent, "neutral", "file")?.data
+            if(sentimentImageId){
+                await this.showImage(
+                        "portrait", 
+                        sentimentImageId, 3, 
+                        isNaN(options.portraitX) ? 104 : options.portraitX, 
+                        isNaN(options.portraitY) ? 102 : options.portraitY
+                )
+                return true;
+            }
+        }
+        return false;
+    }
+
     async sayWithPortrait(text, character, sentiment, options){
         const characterEvent = findEventByTag(this.data, character);
         let portraitShown = false;
@@ -546,7 +571,12 @@ class BipsiPlayback extends EventTarget {
             const sentimentImageId =  oneField(characterEvent, sentiment, "file")?.data
                                    || oneField(characterEvent, "neutral", "file")?.data
             if(sentimentImageId){
-                await this.showImage("portrait", sentimentImageId, 3, 104, 102);
+                await this.showImage(
+                        "portrait", 
+                        sentimentImageId, 3, 
+                        isNaN(options.portraitX) ? 104 : options.portraitX, 
+                        isNaN(options.portraitY) ? 102 : options.portraitY
+                )
                 portraitShown = true;
             }
         }
@@ -556,12 +586,22 @@ class BipsiPlayback extends EventTarget {
         }
     }
 
+    getSayStyle(character, style){
+        const characterEvent = findEventByTag(this.data, character);
+        if(characterEvent){
+            return  oneField(characterEvent, style, "json")?.data
+                     || {}
+            
+        }
+        return {}
+    }
+
     async continueStory(EVENT){
         const story = this.story;
         const AVATAR = findEventByTag(this.data, "is-player");
-        const sayStyle = oneField(EVENT, "say-style", "json")?.data 
-                        || oneField(AVATAR, "say-style", "json")?.data 
-                        || {};
+        const defaultSayStyle = oneField(EVENT, "say-style", "json")?.data 
+                             || oneField(AVATAR, "say-style", "json")?.data 
+                             || {};
 
         while(story.canContinue) {
             // Get ink to generate the next paragraph
@@ -589,8 +629,17 @@ class BipsiPlayback extends EventTarget {
                 }else if(tags.includes("TITLE")){
                     await this.title(paragraphText);
                 }else{
+                    let sayStyle = defaultSayStyle;
+
+                    const adhocSayStyle = tags.find(t => t.match(/say-style\s*:\s*[a-zA-Z0-9]*-[a-zA-Z0-9]*/))
+                    if(adhocSayStyle){
+                        const matchSayStyle = adhocSayStyle.match(/say-style\s*:\s*([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/);
+                        const character = matchSayStyle[1];
+                        const sentiment = matchSayStyle[2];
+                        sayStyle = this.getSayStyle(character, sentiment)
+                    }
                     
-                    const portrait = tags.find(t => t.match(/[a-zA-Z0-9]*-[a-zA-Z0-9]*/))
+                    const portrait = tags.find(t => t.match(/^[a-zA-Z0-9]*-[a-zA-Z0-9]*$/))
                     if(portrait){
                         const matchPortrait = portrait.match(/([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/);
                         const character = matchPortrait[1];
@@ -633,6 +682,7 @@ class BipsiPlayback extends EventTarget {
 
             const choiceEvents = new Map();
             
+            let choiceTags = []
             dialogChoices.forEach(function(choice) {
                 const [arrowEvent, glyph] = availableArrows.shift() || [];
                 if(arrowEvent){
@@ -640,27 +690,67 @@ class BipsiPlayback extends EventTarget {
                     choiceEvents.set(arrowEvent,  () => {
                         story.ChooseChoiceIndex(choice.index);
                     });
+                    choiceTags = [...choiceTags, ...choice.tags];
                 }
             });
+
+            let choiceSayStyle = {};
+
+            const portrait = choiceTags.find(t => t.match(/^[a-zA-Z0-9]*-[a-zA-Z0-9]*$/))
+
+            // by default, if there is a portrait, show it above the choices
+            if(portrait){
+                const height = DIALOGUE_DEFAULTS.padding * 2 
+                    + (10 + DIALOGUE_DEFAULTS.lineGap) * dialogChoicesTexts.length;
+                choiceSayStyle = {
+                    ...choiceSayStyle,
+                    portraitY: 102 - height/2 + dialogChoicesTexts.length,
+                }
+            }
+
+            const adhocSayStyle = choiceTags.find(t => t.match(/say-style\s*:\s*[a-zA-Z0-9]*-[a-zA-Z0-9]*/))
+            if(adhocSayStyle){
+                const matchSayStyle = adhocSayStyle.match(/say-style\s*:\s*([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/);
+                const character = matchSayStyle[1];
+                const sentiment = matchSayStyle[2];
+                choiceSayStyle = this.getSayStyle(character, sentiment)   
+            }
+
+            let portraitShown = false;
+            if(portrait){
+                const matchPortrait = portrait.match(/([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/);
+                const character = matchPortrait[1];
+                const sentiment = matchPortrait[2];
+                portraitShown = await this.showPortrait(character, sentiment, choiceSayStyle)
+            }  
+
             //always display choices at the bottom
             this.say(dialogChoicesTexts.join("\n"), {
-                ...sayStyle, 
+                ...defaultSayStyle,
                 ...{"noMargin": true,
                     "anchorX": 0, "anchorY": 1, lineWidth: 40*6,
                     "lines": dialogChoicesTexts.length,
-                    }
+                    },
+                ...choiceSayStyle, 
                 })
-            const listenToChoice = (event) =>{
-                const choiceAction = choiceEvents.get(event.detail)
-                if(choiceAction){
-                    choiceAction();
-                    playback.proceed();
-                    playback.removeEventListener('choice', listenToChoice);
-                    playback.choiceExpected = false;
-                    continueStory(EVENT);
+            
+            const listenToChoice = (portraitShown) => {
+                const listener = (event) =>{
+                    const choiceAction = choiceEvents.get(event.detail)
+                    if(choiceAction){
+                        if(portraitShown){
+                            this.hideImage("portrait");
+                        }
+                        choiceAction();
+                        playback.proceed();
+                        playback.removeEventListener('choice', listener);
+                        playback.choiceExpected = false;
+                        continueStory(EVENT);
+                    }
                 }
+                return listener;
             }
-            this.addEventListener("choice", listenToChoice);
+            this.addEventListener("choice", listenToChoice(portraitShown));
         }else{
             this.choiceExpected = false
         }
@@ -916,14 +1006,14 @@ class BipsiPlayback extends EventTarget {
     }
 
     playMusic(src) {
-        const playing = !this.music.paused;
         this.music.src = src;
         this.autoplay = true;
-        if (playing) this.music.play();
+        this.music.play();
     }
 
     stopMusic() {
         this.music.pause();
+        this.music.removeAttribute("src");
         this.autoplay = false;
     }
 
@@ -932,6 +1022,8 @@ class BipsiPlayback extends EventTarget {
     }
     
     async showImage(imageID, fileIDs, layer, x, y) {
+        console.log(imageID, fileIDs, layer, x, y)
+
         if (typeof fileIDs === "string") {
             fileIDs = [fileIDs];
         }
@@ -1192,7 +1284,7 @@ const SCRIPTING_FUNCTIONS = {
         if(files.length > 0) return files;
 
         if (names && this.LIBRARY) {
-            files = names.map((name) => FIELD(this.LIBRARY, name, "file"))//.filter(Boolean);
+            files = names.map((name) => FIELD(this.LIBRARY, name, "file"))
         } else if (this.LIBRARY) {
             files = FIELDS(this.LIBRARY, field, "file");
         }
