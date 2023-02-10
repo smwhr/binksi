@@ -5130,6 +5130,9 @@ class StoryEditor {
         const story = this.story;
         this.inkPlayerContainer.innerHTML = "";
         story.ResetState();
+        if(story.globalTags){
+            this.inkPlayerContainer.innerHTML += story.globalTags.map(t => `<span class="tag>#${t}</span>`).join()
+        }
         this.continueStory(story, withChoices);
     }
 
@@ -5150,6 +5153,17 @@ class StoryEditor {
             var paragraphText = story.Continue();
             var paragraphElement = document.createElement('p');
             paragraphElement.innerHTML = paragraphText;
+            
+            var tags = story.currentTags;
+            if(tags){
+                tags.forEach(t => {
+                    var tagElement = document.createElement('span');
+                    tagElement.innerHTML = `# ${t}`
+                    tagElement.className = "tag"
+                    paragraphElement.appendChild(tagElement)
+                });
+            }
+            
             self.inkPlayerContainer.appendChild(paragraphElement);
         }
 
@@ -5163,7 +5177,7 @@ class StoryEditor {
             var choiceParagraphElement = document.createElement('p');
             choiceParagraphElement.classList.add("choice");
             const choiceA = `<a href='#'>${choice.text}</a>`;
-            const choiceTags = choice.tags && choice.tags.length ? `<span> # ${choice.tags.join(", ")}</span>` : '';
+            const choiceTags = choice.tags && choice.tags.length ? `<span class="tag"> # ${choice.tags.join(", ")}</span>` : '';
             choiceParagraphElement.innerHTML = choiceA + choiceTags;
             self.inkPlayerContainer.appendChild(choiceParagraphElement);
 
@@ -8333,7 +8347,8 @@ async function makePlayback(font, bundle, story) {
 
     function down(key, code) {
         if (!playback.canMove) {
-            if(playback.choiceExpected && playback.dialoguePlayback.completed()){
+            const dialog_is_completed = playback.dialoguePlayback.showGlyphCount === playback.dialoguePlayback.pageGlyphCount;
+            if(playback.choiceExpected && dialog_is_completed){
                 return doChoice(key);
             };
             playback.proceed();
@@ -8387,7 +8402,8 @@ async function makePlayback(font, bundle, story) {
             const nextKey = turnToKey[turns];
 
             if (dist >= threshold) {
-                if(playback.choiceExpected && playback.dialoguePlayback.completed()){
+                const dialog_is_completed = playback.dialoguePlayback.showGlyphCount === playback.dialoguePlayback.pageGlyphCount;
+                if(playback.choiceExpected && dialog_is_completed){
                     return doChoice(nextKey);
                 }else{
                     doMove(nextKey);
@@ -9951,6 +9967,10 @@ p {
     padding: 1em;
     border: solid 1em var(--button-color);
 }
+
+#story-container .tag{
+    color:darkgray;
+}
     </style>
     <style data-editor-only="data-editor-only">.ace_editor span.ace_flow.ace_declaration,
 .ace_editor span.ace_divert,
@@ -10270,7 +10290,7 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.9.2-beta (2022/11/12)</h2>
+          <h2>binksi -- 0.9.3-beta (2023/02/10)</h2>
           <p>binksi is a bitsy-like tool for making small lo-fi graphical adventure games where a character explores a world and interacts with its inhabitants.</p>
           <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
           <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
