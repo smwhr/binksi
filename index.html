@@ -4057,7 +4057,7 @@ const SCRIPTING_FUNCTIONS = {
         this.STORY.variablesState.$(field, value);
     },
     GET_INK_VAR(field) {
-        this.STORY.variablesState.$(field);
+        return this.STORY.variablesState.$(field);
     },
     DIVERT_TO(knot_name) {
         this.STORY.ChoosePathString(knot_name);
@@ -10290,7 +10290,7 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.10.1-beta (2023/02/10)</h2>
+          <h2>binksi -- 0.10.1-beta (2023/04/27)</h2>
           <p>binksi is a bitsy-like tool for making small lo-fi graphical adventure games where a character explores a world and interacts with its inhabitants.</p>
           <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
           <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
