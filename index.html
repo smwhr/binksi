@@ -3039,6 +3039,7 @@ class BipsiPlayback extends EventTarget {
 
         this.time = 0;
         this.frameCount = 0;
+        this.frameDelay = .400;
         
         this.ready = false;
         this.busy = false;
@@ -3100,6 +3101,10 @@ class BipsiPlayback extends EventTarget {
     }
 
     clear() {
+        this.time = 0;
+        this.frameCount = 0;
+        this.frameDelay = .400;
+
         this.ready = false;
         this.error = false;
         this.ended = false;
@@ -3392,9 +3397,9 @@ class BipsiPlayback extends EventTarget {
 
         // tile animation
         this.time += dt;
-        while (this.time >= .400) {
+        while (this.time >= this.frameDelay) {
             this.frameCount += 1;
-            this.time -= .4;
+            this.time -= this.frameDelay;
         }
 
         // dialogue animation
@@ -4143,18 +4148,18 @@ async function generateRoomPreviewURL(destination, playback, roomId) {
 
 /**
  * @param {BipsiPlayback} playback
- * @returns {[string, number][]}
+ * @returns {Promise<[string, number][]>}
  */
-function recordFrames(playback) {
+async function recordFrames(playback) {
     const frames = [];
     const temp = createRendering2D(512, 512);
 
-    playback.render(0);
+    await playback.render(0);
     temp.drawImage(playback.rendering.canvas, 0, 0, 512, 512);
-    frames.push([temp.canvas.toDataURL(), 400]);
-    playback.render(1);
+    frames.push([temp.canvas.toDataURL(), Math.floor(playback.frameDelay * 1000)]);
+    await playback.render(1);
     temp.drawImage(playback.rendering.canvas, 0, 0, 512, 512);
-    frames.push([temp.canvas.toDataURL(), 400]);
+    frames.push([temp.canvas.toDataURL(), Math.floor(playback.frameDelay * 1000)]);
 
     return frames;
 }
@@ -6569,9 +6574,9 @@ class BipsiEditor extends EventTarget {
             const textedit = isElementTextInput(event.target);
 
             if (event.ctrlKey || event.metaKey) {
-                if (event.key === "z" && !textedit) this.actions.undo.invoke();
-                if (event.key === "y" && !textedit) this.actions.redo.invoke();
-                if (event.key === "s") {
+                if (event.key.toLowerCase() === "z" && !textedit) this.actions.undo.invoke();
+                if (event.key.toLowerCase() === "y" && !textedit) this.actions.redo.invoke();
+                if (event.key.toLowerCase() === "s") {
                     // make sure current text editing changes are registered
                     // before saving
                     if (textedit) {
@@ -8415,13 +8420,13 @@ async function makePlayback(font, bundle, story) {
         });
     });
 
-    function captureGif() {
-        const frames = recordFrames(playback);
+    async function captureGif() {
         const giffer = window.open(
             "https://kool.tools/tools/gif/",
             "gif maker",
             "left=10,top=10,width=512,height=512,resizable=no,location=no",
         );
+        const frames = await recordFrames(playback);
         sleep(500).then(() => giffer.postMessage({ name: "bipsi", frames }, "https://kool.tools"));
     }
 
@@ -10290,7 +10295,7 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.10.1-beta (2023/04/27)</h2>
+          <h2>binksi -- 0.10.1-beta (2023/05/28)</h2>
           <p>binksi is a bitsy-like tool for making small lo-fi graphical adventure games where a character explores a world and interacts with its inhabitants.</p>
           <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a></p>
           <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi !</p>
