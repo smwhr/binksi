@@ -408,6 +408,7 @@ class BipsiPlayback extends EventTarget {
 
         this.time = 0;
         this.frameCount = 0;
+        this.frameDelay = .400;
         
         this.ready = false;
         this.busy = false;
@@ -469,6 +470,10 @@ class BipsiPlayback extends EventTarget {
     }
 
     clear() {
+        this.time = 0;
+        this.frameCount = 0;
+        this.frameDelay = .400;
+
         this.ready = false;
         this.error = false;
         this.ended = false;
@@ -761,9 +766,9 @@ class BipsiPlayback extends EventTarget {
 
         // tile animation
         this.time += dt;
-        while (this.time >= .400) {
+        while (this.time >= this.frameDelay) {
             this.frameCount += 1;
-            this.time -= .4;
+            this.time -= this.frameDelay;
         }
 
         // dialogue animation
@@ -1426,7 +1431,7 @@ const SCRIPTING_FUNCTIONS = {
         this.STORY.variablesState.$(field, value);
     },
     GET_INK_VAR(field) {
-        this.STORY.variablesState.$(field);
+        return this.STORY.variablesState.$(field);
     },
     DIVERT_TO(knot_name) {
         this.STORY.ChoosePathString(knot_name);

@@ -24,7 +24,19 @@
  * @typedef {Object} BlitsyFontCharacter
  * @property {number} codepoint
  * @property {CanvasImageSource} image
+ * @property {Rect} rect
  * @property {number} spacing
+ * @property {Vector2?} offset
+ */
+
+/**
+ * @typedef {Object} BipsiDataFont
+ * @property {string} name
+ * @property {number} charWidth
+ * @property {number} charHeight
+ * @property {number[][]} runs
+ * @property {Object.<number, { spacing: number, offset: Vector2, size: Vector2 }>} special
+ * @property {string} atlas
  */
 
 /**
@@ -37,6 +49,7 @@
 /**
  * @typedef {Object} BlitsyGlyph
  * @property {HTMLCanvasElement} image
+ * @property {Rect} rect
  * @property {Vector2} position
  * @property {Vector2} offset
  * @property {boolean} hidden
@@ -52,6 +65,44 @@
  */
 
 /** @typedef {BlitsyGlyph[]} BlitsyPage */
+
+/**
+ * @param {BipsiDataFont} data
+ */
+async function loadBipsiFont(data) {
+    const font = {
+        name: data.name,
+        lineHeight: data.charHeight,
+        characters: new Map(),
+    }
+
+    const atlas = await loadImage(data.atlas);
+    const cols = atlas.naturalWidth / data.charWidth;
+
+    const indexes = data.runs.flatMap(([start, end]) => range(start, end ?? start));
+
+    indexes.forEach((codepoint, i) => {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        
+        const special = data.special?.[codepoint];
+        const size = special?.size;
+
+        const rect = { 
+            x: col * data.charWidth, 
+            y: row * data.charHeight, 
+            width: size?.x ?? data.charWidth, 
+            height: size?.y ?? data.charHeight,
+        };
+
+        const spacing = special?.spacing ?? rect.width;
+        const offset = special?.offset;
+
+        font.characters.set(codepoint, { codepoint, image: atlas, rect, spacing, offset });
+    });
+
+    return font;
+}
 
 /** @param {HTMLScriptElement} script */
 async function loadBasicFont(script) {
@@ -80,8 +131,7 @@ async function loadBasicFont(script) {
             height: charHeight,
         };
 
-        const image = copyImageRect(atlas, rect).canvas;
-        font.characters.set(codepoint, { codepoint, image, spacing: charWidth });
+        font.characters.set(codepoint, { codepoint, image: atlas, rect, spacing: charWidth, offset: { x: 0, y: 0 } });
     });
 
     return font;
@@ -96,16 +146,6 @@ function parseRuns(data) {
     const indexes = [];
     runs.forEach(([min, max]) => indexes.push(...range(min, max)));
     return indexes;
-}
-
-/**
- * @param {CanvasImageSource} source 
- * @param {Rect} rect 
- */
-function copyImageRect(source, rect) {
-    const rendering = createRendering2D(rect.width, rect.height);
-    rendering.drawImage(source, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
-    return rendering;
 }
 
 /**
@@ -137,12 +177,19 @@ function renderPage(page, width, height, ox = 0, oy = 0)
         const x = ox + glyph.position.x + glyph.offset.x;
         const y = oy + glyph.position.y + glyph.offset.y;
         
+        const {
+            x: glyphX,
+            y: glyphY,
+            width: glyphWidth,
+            height: glyphHeight,
+        } = glyph.rect;
+
         // draw tint layer
         result.fillStyle = glyph.fillStyle;
-        result.fillRect(x, y, glyph.image.width, glyph.image.height);
+        result.fillRect(x, y, glyphWidth, glyphHeight);
         
         // draw text layer
-        buffer.drawImage(glyph.image, x, y);
+        buffer.drawImage(glyph.image, glyphX, glyphY, glyphWidth, glyphHeight, x, y, glyphWidth, glyphHeight);
     }
 
     // draw text layer in tint color
@@ -294,11 +341,15 @@ function commandsToPages(commands, options, styleHandler) {
 
     function addGlyph(command, offset) {
         const char = getFontChar(options.font, command.char) ?? getFontChar(options.font, "?");
-        const position = { x: offset, y: currLine * (options.font.lineHeight + 4) };
+
+        const x = offset + (char.offset?.x ?? 0);
+        const y = currLine * (options.font.lineHeight + 4) + (char.offset?.y ?? 0);
+
         const glyph = { 
             char: command.char,
             image: char.image,
-            position,
+            rect: char.rect,
+            position: { x, y },
             offset: { x: 0, y: 0 },
             hidden: true,
             fillStyle: "white",

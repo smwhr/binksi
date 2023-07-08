@@ -35,6 +35,9 @@ async function makePlayback(font, bundle, story) {
     const playCanvas = /** @type {HTMLCanvasElement} */ (ONE("#player-canvas"));
     const playRendering = /** @type {CanvasRenderingContext2D} */ (playCanvas.getContext("2d"));
 
+    // need to override touch events for mobile
+    document.body.style.touchAction = "none";
+
     // update the canvas size every render just in case..
     playback.addEventListener("render", () => {
         fillRendering2D(playRendering);
@@ -100,7 +103,8 @@ async function makePlayback(font, bundle, story) {
         if (!playback.canMove) {
             const dialog_is_completed = playback.dialoguePlayback.showGlyphCount === playback.dialoguePlayback.pageGlyphCount;
             if(playback.choiceExpected && dialog_is_completed){
-                return doChoice(key);
+                const keyChoice = ([...keyToCode.entries()].find( ([k,v]) => v == `Key${key.toUpperCase()}`) || [key])[0]
+                return doChoice(keyChoice);
             };
             playback.proceed();
         } else {
@@ -166,13 +170,13 @@ async function makePlayback(font, bundle, story) {
         });
     });
 
-    function captureGif() {
-        const frames = recordFrames(playback);
+    async function captureGif() {
         const giffer = window.open(
             "https://kool.tools/tools/gif/",
             "gif maker",
             "left=10,top=10,width=512,height=512,resizable=no,location=no",
         );
+        const frames = await recordFrames(playback);
         sleep(500).then(() => giffer.postMessage({ name: "bipsi", frames }, "https://kool.tools"));
     }
 
@@ -225,7 +229,7 @@ let PLAYBACK;
 let EDITOR;
 
 async function start() {
-    const font = await loadBasicFont(ONE("#font-embed"));
+    const font = await loadBipsiFont(JSON.parse(ONE("#font-embed").textContent));
 
     if (BIPSI_HD) document.documentElement.dataset.hd = "true";
 
