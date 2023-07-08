@@ -103,7 +103,7 @@ async function makePlayback(font, bundle, story) {
         if (!playback.canMove) {
             const dialog_is_completed = playback.dialoguePlayback.showGlyphCount === playback.dialoguePlayback.pageGlyphCount;
             if(playback.choiceExpected && dialog_is_completed){
-                const keyChoice = ([...keyToCode.entries()].find( ([k,v]) => v == key) || [key])[0]
+                const keyChoice = ([...keyToCode.entries()].find( ([k,v]) => v == `Key${key.toUpperCase()}`) || [key])[0]
                 return doChoice(keyChoice);
             };
             playback.proceed();
