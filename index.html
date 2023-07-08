@@ -1546,7 +1546,7 @@ async function canvasToBlob(canvas) {
  * @property {number} charWidth
  * @property {number} charHeight
  * @property {number[][]} runs
- * @property {Map<number, { spacing: number, offset: Vector2, size: Vector2 }>} special
+ * @property {Object.<number, { spacing: number, offset: Vector2, size: Vector2 }>} special
  * @property {string} atlas
  */
 
@@ -1606,7 +1606,7 @@ async function loadBipsiFont(data) {
             height: size?.y ?? data.charHeight,
         };
 
-        const spacing = special?.spacing ?? size?.x ?? data.charWidth;
+        const spacing = special?.spacing ?? rect.width;
         const offset = special?.offset;
 
         font.characters.set(codepoint, { codepoint, image: atlas, rect, spacing, offset });
@@ -7974,7 +7974,7 @@ class TileBrowser {
 
     set selectedTileIndex(value) { 
         this.select.setValueSilent(value);
-        this.select.inputs[this.select.selectedIndex]?.scrollIntoView({ block: "center" }); 
+        //this.select.inputs[this.select.selectedIndex]?.scrollIntoView({ block: "nearest" });
     }
 
     setFrame(frame) {
@@ -8340,6 +8340,9 @@ async function makePlayback(font, bundle, story) {
     const playCanvas = /** @type {HTMLCanvasElement} */ (ONE("#player-canvas"));
     const playRendering = /** @type {CanvasRenderingContext2D} */ (playCanvas.getContext("2d"));
 
+    // need to override touch events for mobile
+    document.body.style.touchAction = "none";
+
     // update the canvas size every render just in case..
     playback.addEventListener("render", () => {
         fillRendering2D(playRendering);
@@ -8611,10 +8614,6 @@ body {
     </style>
     <style>body {    
     background: var(--page-color, black);
-}
-
-body, canvas {
-    touch-action: none;
 }
 
 #player {
@@ -10346,7 +10345,7 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.10.2-beta (2023/06/19)</h2>
+          <h2>binksi -- 0.10.2-beta (2023/07/08)</h2>
           <p>binksi is a bitsy-like tool for making small lo-fi graphical adventure games where a character explores a world and interacts with its inhabitants.</p>
           <p>propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a>.</p>
           <p>many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi ! Support its development on <a href="https://www.patreon.com/kooltools">candle's patreon</a>.</p>
