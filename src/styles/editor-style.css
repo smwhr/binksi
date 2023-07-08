@@ -202,7 +202,6 @@ input[type="text"], textarea {
 .grid4 > *:nth-last-child(1) { border-bottom-right-radius: 1em; }
 
 body {
-    touch-action: none;
     background: var(--page-color, black);
     color: black;
 }
