@@ -622,11 +622,51 @@ class BipsiPlayback extends EventTarget {
         return {}
     }
 
+    // A handler can return true to prevent the next handlers from running
+    paragraphHandlers = [
+        async function handleSpawnAt(paragraphText){
+            const matchSpawn = paragraphText.match(/SPAWN_AT\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
+            if ( matchSpawn ){
+                const target = matchSpawn[1];
+                const event = matchSpawn[3] || "is-player";
+                await this.spawnAt(target.trim(), event.trim());
+                return true;
+            }
+        },
+        async function handleCutscene(paragraphText) {
+            const matchCutscene = paragraphText.match(/CUTSCENE\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
+            if( matchCutscene ) {
+                const target = matchCutscene[1];
+                const field = matchCutscene[3] || "touch";
+                let targetEvent = findEventByTag(this.data, target);
+                if(targetEvent){
+                    const js_field = oneField(targetEvent, field, "javascript")?.data;
+                    if (js_field !== undefined) {
+                        await this.runJS(targetEvent, js_field);
+                    }
+                }
+                return true;
+            }
+        },
+        async function handleTitleTag(paragraphText, tags) {
+            if(tags.includes("TITLE")){
+                await this.title(paragraphText);
+                return true;
+            }
+        }
+    ];
+
+    async runParagraphHandlers(...args) {
+        for (const h of this.paragraphHandlers) {
+            if (await h.apply(this, args) === true) return true;
+        }
+    }
+
     async continueStory(EVENT){
         const story = this.story;
         const AVATAR = findEventByTag(this.data, "is-player");
-        const defaultSayStyle = oneField(EVENT, "say-style", "json")?.data 
-                             || oneField(AVATAR, "say-style", "json")?.data 
+        const defaultSayStyle = oneField(EVENT, "say-style", "json")?.data
+                             || oneField(AVATAR, "say-style", "json")?.data
                              || {};
 
         while(story.canContinue) {
@@ -635,26 +675,8 @@ class BipsiPlayback extends EventTarget {
             var tags = story.currentTags;
 
             if(paragraphText.length > 0){
-                const matchSpawn = paragraphText.trim().match(/SPAWN_AT\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
-                const matchCutscene = paragraphText.trim().match(/CUTSCENE\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
-
-                if( matchSpawn ){
-                    const target = matchSpawn[1];
-                    const event = matchSpawn[3] || "is-player";
-                    await this.spawnAt(target.trim(), event.trim());
-                }else if( matchCutscene ){
-                    const target = matchCutscene[1];
-                    const field = matchCutscene[3] || "touch";
-                    let targetEvent = findEventByTag(this.data, target);
-                    if(targetEvent){
-                        const js_field = oneField(targetEvent, field, "javascript")?.data;
-                        if (js_field !== undefined) {
-                            await this.runJS(targetEvent, js_field);
-                        }
-                    }
-                }else if(tags.includes("TITLE")){
-                    await this.title(paragraphText);
-                }else{
+                const handled = this.runParagraphHandlers(paragraphText, tags);
+                if (!handled) {
                     let sayStyle = defaultSayStyle;
 
                     const adhocSayStyle = tags.find(t => t.match(/say-style\s*:\s*[a-zA-Z0-9]*-[a-zA-Z0-9]*/))
