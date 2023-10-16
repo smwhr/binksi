@@ -72,7 +72,7 @@ function allFields(event, name, type=undefined) {
 
 /**
  * 
- * @param {BipsiDataEvent} event
+ * @param {BipsiDataEvent} event 
  */
  function allTags(event) {
     return event.fields.filter((field) => field.type === "tag").map((field) => field.key);
@@ -109,12 +109,25 @@ function roomFromEvent(data, event) {
  * @returns {BipsiDataEvent?}
  */
 function getEventAtLocation(data, location) {
-    const room = data.rooms.find((room) => room.id === location.room);
+    const room = findRoomById(data, location.room);
     
     const [x, y] = location.position;
     const [event] = getEventsAt(room.events, x, y);
     return event;
 } 
+
+/**
+ * @param {BipsiDataProject} data 
+ * @param {BipsiDataLocation} location
+ * @returns {BipsiDataEvents?}
+ */
+function getEventsAtLocation(data, location) {
+    const room = findRoomById(data, location.room);
+
+    const [x, y] = location.position;
+    const events = getEventsAt(room.events, x, y);
+    return events;
+}
 
 /**
  * @param {BipsiDataProject} data 
@@ -132,7 +145,7 @@ function getLocationOfEvent(data, event) {
  * @param {BipsiDataLocation} location
  */
 function moveEvent(data, event, location) {
-    const room = data.rooms.find((room) => room.id === location.room);
+    const room = findRoomById(data, location.room);
     
     if (!room) throw Error("NO ROOM WITH ID " + location.room);
     
@@ -165,6 +178,14 @@ function shuffleArray(array) {
         const j = Math.floor(Math.random() * (i + 1));
         [array[i], array[j]] = [array[j], array[i]];
     }
+}
+
+/**
+ * @param {BipsiDataProject} data
+ * @param {number} roomId
+ */
+function findRoomById(data, roomId) {
+    return data.rooms.find((room) => room.id === roomId);
 }
 
 /**
@@ -313,8 +334,8 @@ if (graphic) {
 
 const BEHAVIOUR_TOUCH_LOCATION = `
 let location = FIELD(EVENT, "touch-location", "location");
-let event = location ? EVENT_AT(location) : undefined;
-if (event) {
+let events = location ? EVENTS_AT(location) : [];
+for (const event of events) {
     await TOUCH(event);
 }
 `;
@@ -926,23 +947,22 @@ class BipsiPlayback extends EventTarget {
         // if not, then update avatar position
         if (!blocked && !bounded) avatar.position = [tx, ty];
 
-        // find if there's an event that should be touched. prefer an event at
-        // the cell the avatar tried to move into but settle for the cell 
-        // they're already standing on otherwise
+        // find if there are events that should be touched. prefer events at
+        // the cell the avatar tried to move into but settle for events at
+        // the cell they're already standing on otherwise
         const [fx, fy] = avatar.position;
-        const events_at_destination = getEventsAt(room.events, tx, ty, avatar);
-        const events_at_position = getEventsAt(room.events, fx, fy, avatar);
-        const events = events_at_destination.length > 0 
-                     ? events_at_destination
-                     : events_at_position
+        const events0 = getEventsAt(room.events, tx, ty, avatar);
+        const events1 = getEventsAt(room.events, fx, fy, avatar);
+        const events = events0.length ? events0 : events1;
 
-        // if there are such events, touch them all
-        await events.forEach(async event => {
+        // if there were such events, touch them
+        for (const event of events) {
             await this.touch(event);
-        }); 
+        }
 
         this.busy = false;
     }
+
 
     eventDebugInfo(event) {
         const tags = allEventTags(event).join(", ");
@@ -994,7 +1014,7 @@ class BipsiPlayback extends EventTarget {
 
         try {
             const script = new AsyncFunction("", preamble + js);
-            await script.call(defines);
+            return await script.call(defines);
         } catch (e) {
             const long = `> SCRIPT ERROR "${e}"\n---\n${js}\n---`;
             this.log(long);
@@ -1002,6 +1022,7 @@ class BipsiPlayback extends EventTarget {
             const error = `SCRIPT ERROR:\n${e}`;
             this.showError(error);
         }
+        return undefined;
     }
 
     makeScriptingDefines(event) {
@@ -1237,6 +1258,10 @@ const SCRIPTING_FUNCTIONS = {
 
     EVENT_AT(location) {
         return getEventAtLocation(this.PLAYBACK.data, location);
+    },
+
+    EVENTS_AT(location) {
+        return getEventsAtLocation(this.PLAYBACK.data, location);
     },
 
     LOCATION_OF(event) {

@@ -13,6 +13,9 @@ async function startEditor(font) {
     // load bundle and enter editor mode
     await editor.loadBundle(bundle);
 
+    // Auto-select the pointed-to event (upper-left corner)
+    editor.selectPointedEvent();
+
     const savedInkSource = await storage.load(`${SAVE_SLOT}-story`).catch(() => undefined);
     const inkSource = savedInkSource || maker.storyFromHTML(document, "#story-source");
 
@@ -164,7 +167,7 @@ async function makePlayback(font, bundle, story) {
                     doMove(nextKey);
                     x0 = x1;
                     y0 = y1;
-                }
+                } 
                 
             } 
         });
@@ -245,5 +248,9 @@ async function start() {
     } else {
         EDITOR = await startEditor(font);
         window.EDITOR = EDITOR;
+
+        // Run EDITOR code for all plugins
+        const editorCode = EDITOR.gatherPluginsJavascript([ "EDITOR" ]);
+        (new Function(editorCode))();
     }
 }
