@@ -624,7 +624,7 @@ class BipsiPlayback extends EventTarget {
 
     // A handler can return true to prevent the next handlers from running
     paragraphHandlers = [
-        async function handleSpawnAt(paragraphText){
+        async function handleSpawnAt({paragraphText}){
             const matchSpawn = paragraphText.match(/SPAWN_AT\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
             if ( matchSpawn ){
                 const target = matchSpawn[1];
@@ -633,7 +633,7 @@ class BipsiPlayback extends EventTarget {
                 return true;
             }
         },
-        async function handleCutscene(paragraphText) {
+        async function handleCutscene({paragraphText}) {
             const matchCutscene = paragraphText.match(/CUTSCENE\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
             if( matchCutscene ) {
                 const target = matchCutscene[1];
@@ -648,17 +648,34 @@ class BipsiPlayback extends EventTarget {
                 return true;
             }
         },
-        async function handleTitleTag(paragraphText, tags) {
+        async function handleTitleTag({paragraphText, tags}) {
             if(tags.includes("TITLE")){
                 await this.title(paragraphText);
+                return true;
+            }
+        },
+        function handleSayStyleTag(context) {
+            // This handler simply modifies the sayStyle
+            const sayStyleRegexp = /say-style\s*:\s*([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/;
+            const adhocSayStyle = context.tags.find(t => sayStyleRegexp.test(t))
+            if(adhocSayStyle){
+                const [, character, sentiment] = adhocSayStyle.match(sayStyleRegexp);
+                context.sayStyle = this.getSayStyle(character, sentiment)
+            }
+        },
+        async function handlePortraitMode({paragraphText, tags, sayStyle}) {
+            const portrait = tags.find(t => t.match(/^[a-zA-Z0-9]*-[a-zA-Z0-9]*$/))
+            if(portrait){
+                const [, character, sentiment] = portrait.match(/([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/);
+                await this.sayWithPortrait(paragraphText, character, sentiment, sayStyle)
                 return true;
             }
         }
     ];
 
-    async runParagraphHandlers(...args) {
+    async runParagraphHandlers(context) {
         for (const h of this.paragraphHandlers) {
-            if (await h.apply(this, args) === true) return true;
+            if (await h.call(this, context) === true) return true;
         }
     }
 
@@ -675,28 +692,14 @@ class BipsiPlayback extends EventTarget {
             var tags = story.currentTags;
 
             if(paragraphText.length > 0){
-                const handled = this.runParagraphHandlers(paragraphText, tags);
+                const context = {
+                    paragraphText,
+                    tags,
+                    sayStyle: {... defaultSayStyle},
+                }
+                const handled = await this.runParagraphHandlers(context);
                 if (!handled) {
-                    let sayStyle = defaultSayStyle;
-
-                    const adhocSayStyle = tags.find(t => t.match(/say-style\s*:\s*[a-zA-Z0-9]*-[a-zA-Z0-9]*/))
-                    if(adhocSayStyle){
-                        const matchSayStyle = adhocSayStyle.match(/say-style\s*:\s*([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/);
-                        const character = matchSayStyle[1];
-                        const sentiment = matchSayStyle[2];
-                        sayStyle = this.getSayStyle(character, sentiment)
-                    }
-                    
-                    const portrait = tags.find(t => t.match(/^[a-zA-Z0-9]*-[a-zA-Z0-9]*$/))
-                    if(portrait){
-                        const matchPortrait = portrait.match(/([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/);
-                        const character = matchPortrait[1];
-                        const sentiment = matchPortrait[2];
-                        await this.sayWithPortrait(paragraphText, character, sentiment, sayStyle)
-                    }else{
-                        await this.say(paragraphText, sayStyle);
-                    }
-                    
+                    await this.say(context.paragraphText, context.sayStyle);
                 }
             }
         }
