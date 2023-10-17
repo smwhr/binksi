@@ -622,8 +622,11 @@ class BipsiPlayback extends EventTarget {
         return {}
     }
 
-    // A handler can return true to prevent the next handlers from running
-    paragraphHandlers = [
+    // paragraphHandlers is static so that plugins can easily modify it without waiting for the playback to be instanciated.
+    // "this" in a handler will be set to the playback instance.
+    // A handler can return true to prevent the next handlers from running.
+    // If no handler marks the paragraph as handled (by returning true), the text will be displayed with the context sayStyle.
+    static paragraphHandlers = [
         async function handleSpawnAt({paragraphText}){
             const matchSpawn = paragraphText.match(/SPAWN_AT\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
             if ( matchSpawn ){
@@ -674,7 +677,7 @@ class BipsiPlayback extends EventTarget {
     ];
 
     async runParagraphHandlers(context) {
-        for (const h of this.paragraphHandlers) {
+        for (const h of BipsiPlayback.paragraphHandlers) {
             if (await h.call(this, context) === true) return true;
         }
     }
