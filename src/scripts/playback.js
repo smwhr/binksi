@@ -622,11 +622,71 @@ class BipsiPlayback extends EventTarget {
         return {}
     }
 
+    // paragraphHandlers is static so that plugins can easily modify it without waiting for the playback to be instanciated.
+    // "this" in a handler will be set to the playback instance.
+    // A handler can return true to prevent the next handlers from running.
+    // If no handler marks the paragraph as handled (by returning true), the text will be displayed with the context sayStyle.
+    static paragraphHandlers = [
+        async function handleSpawnAt({paragraphText}){
+            const matchSpawn = paragraphText.match(/SPAWN_AT\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
+            if ( matchSpawn ){
+                const target = matchSpawn[1];
+                const event = matchSpawn[3] || "is-player";
+                await this.spawnAt(target.trim(), event.trim());
+                return true;
+            }
+        },
+        async function handleCutscene({paragraphText}) {
+            const matchCutscene = paragraphText.match(/CUTSCENE\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
+            if( matchCutscene ) {
+                const target = matchCutscene[1];
+                const field = matchCutscene[3] || "touch";
+                let targetEvent = findEventByTag(this.data, target);
+                if(targetEvent){
+                    const js_field = oneField(targetEvent, field, "javascript")?.data;
+                    if (js_field !== undefined) {
+                        await this.runJS(targetEvent, js_field);
+                    }
+                }
+                return true;
+            }
+        },
+        async function handleTitleTag({paragraphText, tags}) {
+            if(tags.includes("TITLE")){
+                await this.title(paragraphText);
+                return true;
+            }
+        },
+        function handleSayStyleTag(context) {
+            // This handler simply modifies the sayStyle
+            const sayStyleRegexp = /say-style\s*:\s*([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/;
+            const adhocSayStyle = context.tags.find(t => sayStyleRegexp.test(t))
+            if(adhocSayStyle){
+                const [, character, sentiment] = adhocSayStyle.match(sayStyleRegexp);
+                context.sayStyle = this.getSayStyle(character, sentiment)
+            }
+        },
+        async function handlePortraitMode({paragraphText, tags, sayStyle}) {
+            const portrait = tags.find(t => t.match(/^[a-zA-Z0-9]*-[a-zA-Z0-9]*$/))
+            if(portrait){
+                const [, character, sentiment] = portrait.match(/([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/);
+                await this.sayWithPortrait(paragraphText, character, sentiment, sayStyle)
+                return true;
+            }
+        }
+    ];
+
+    async runParagraphHandlers(context) {
+        for (const h of BipsiPlayback.paragraphHandlers) {
+            if (await h.call(this, context) === true) return true;
+        }
+    }
+
     async continueStory(EVENT){
         const story = this.story;
         const AVATAR = findEventByTag(this.data, "is-player");
-        const defaultSayStyle = oneField(EVENT, "say-style", "json")?.data 
-                             || oneField(AVATAR, "say-style", "json")?.data 
+        const defaultSayStyle = oneField(EVENT, "say-style", "json")?.data
+                             || oneField(AVATAR, "say-style", "json")?.data
                              || {};
 
         while(story.canContinue) {
@@ -635,46 +695,14 @@ class BipsiPlayback extends EventTarget {
             var tags = story.currentTags;
 
             if(paragraphText.length > 0){
-                const matchSpawn = paragraphText.trim().match(/SPAWN_AT\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
-                const matchCutscene = paragraphText.trim().match(/CUTSCENE\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
-
-                if( matchSpawn ){
-                    const target = matchSpawn[1];
-                    const event = matchSpawn[3] || "is-player";
-                    await this.spawnAt(target.trim(), event.trim());
-                }else if( matchCutscene ){
-                    const target = matchCutscene[1];
-                    const field = matchCutscene[3] || "touch";
-                    let targetEvent = findEventByTag(this.data, target);
-                    if(targetEvent){
-                        const js_field = oneField(targetEvent, field, "javascript")?.data;
-                        if (js_field !== undefined) {
-                            await this.runJS(targetEvent, js_field);
-                        }
-                    }
-                }else if(tags.includes("TITLE")){
-                    await this.title(paragraphText);
-                }else{
-                    let sayStyle = defaultSayStyle;
-
-                    const adhocSayStyle = tags.find(t => t.match(/say-style\s*:\s*[a-zA-Z0-9]*-[a-zA-Z0-9]*/))
-                    if(adhocSayStyle){
-                        const matchSayStyle = adhocSayStyle.match(/say-style\s*:\s*([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/);
-                        const character = matchSayStyle[1];
-                        const sentiment = matchSayStyle[2];
-                        sayStyle = this.getSayStyle(character, sentiment)
-                    }
-                    
-                    const portrait = tags.find(t => t.match(/^[a-zA-Z0-9]*-[a-zA-Z0-9]*$/))
-                    if(portrait){
-                        const matchPortrait = portrait.match(/([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/);
-                        const character = matchPortrait[1];
-                        const sentiment = matchPortrait[2];
-                        await this.sayWithPortrait(paragraphText, character, sentiment, sayStyle)
-                    }else{
-                        await this.say(paragraphText, sayStyle);
-                    }
-                    
+                const context = {
+                    paragraphText,
+                    tags,
+                    sayStyle: {... defaultSayStyle},
+                }
+                const handled = await this.runParagraphHandlers(context);
+                if (!handled) {
+                    await this.say(context.paragraphText, context.sayStyle);
                 }
             }
         }
