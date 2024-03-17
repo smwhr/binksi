@@ -72,7 +72,7 @@ function allFields(event, name, type=undefined) {
 
 /**
  * 
- * @param {BipsiDataEvent} event
+ * @param {BipsiDataEvent} event 
  */
  function allTags(event) {
     return event.fields.filter((field) => field.type === "tag").map((field) => field.key);
@@ -109,12 +109,25 @@ function roomFromEvent(data, event) {
  * @returns {BipsiDataEvent?}
  */
 function getEventAtLocation(data, location) {
-    const room = data.rooms.find((room) => room.id === location.room);
+    const room = findRoomById(data, location.room);
     
     const [x, y] = location.position;
     const [event] = getEventsAt(room.events, x, y);
     return event;
 } 
+
+/**
+ * @param {BipsiDataProject} data
+ * @param {BipsiDataLocation} location
+ * @returns {BipsiDataEvents?}
+ */
+function getEventsAtLocation(data, location) {
+    const room = findRoomById(data, location.room);
+
+    const [x, y] = location.position;
+    const events = getEventsAt(room.events, x, y);
+    return events;
+}
 
 /**
  * @param {BipsiDataProject} data 
@@ -132,7 +145,7 @@ function getLocationOfEvent(data, event) {
  * @param {BipsiDataLocation} location
  */
 function moveEvent(data, event, location) {
-    const room = data.rooms.find((room) => room.id === location.room);
+    const room = findRoomById(data, location.room);
     
     if (!room) throw Error("NO ROOM WITH ID " + location.room);
     
@@ -165,6 +178,14 @@ function shuffleArray(array) {
         const j = Math.floor(Math.random() * (i + 1));
         [array[i], array[j]] = [array[j], array[i]];
     }
+}
+
+/**
+ * @param {BipsiDataProject} data
+ * @param {number} roomId
+ */
+function findRoomById(data, roomId) {
+    return data.rooms.find((room) => room.id === roomId);
 }
 
 /**
@@ -313,8 +334,8 @@ if (graphic) {
 
 const BEHAVIOUR_TOUCH_LOCATION = `
 let location = FIELD(EVENT, "touch-location", "location");
-let event = location ? EVENT_AT(location) : undefined;
-if (event) {
+let events = location ? EVENTS_AT(location) : [];
+for (const event of events) {
     await TOUCH(event);
 }
 `;
@@ -419,6 +440,7 @@ class BipsiPlayback extends EventTarget {
 
         this.objectURLs = new Map();
         this.imageElements = new Map();
+        this.visibleImagesLoadedWaiter = { then: (resolve, reject) => this.visibleImagesLoaded().then(resolve, reject) };
 
         this.music = document.createElement("audio");
         this.music.loop = true;
@@ -601,11 +623,71 @@ class BipsiPlayback extends EventTarget {
         return {}
     }
 
+    // paragraphHandlers is static so that plugins can easily modify it without waiting for the playback to be instanciated.
+    // "this" in a handler will be set to the playback instance.
+    // A handler can return true to prevent the next handlers from running.
+    // If no handler marks the paragraph as handled (by returning true), the text will be displayed with the context sayStyle.
+    static paragraphHandlers = [
+        async function handleSpawnAt({paragraphText}){
+            const matchSpawn = paragraphText.match(/SPAWN_AT\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
+            if ( matchSpawn ){
+                const target = matchSpawn[1];
+                const event = matchSpawn[3] || "is-player";
+                await this.spawnAt(target.trim(), event.trim());
+                return true;
+            }
+        },
+        async function handleCutscene({paragraphText}) {
+            const matchCutscene = paragraphText.match(/CUTSCENE\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
+            if( matchCutscene ) {
+                const target = matchCutscene[1];
+                const field = matchCutscene[3] || "touch";
+                let targetEvent = findEventByTag(this.data, target);
+                if(targetEvent){
+                    const js_field = oneField(targetEvent, field, "javascript")?.data;
+                    if (js_field !== undefined) {
+                        await this.runJS(targetEvent, js_field);
+                    }
+                }
+                return true;
+            }
+        },
+        async function handleTitleTag({paragraphText, tags}) {
+            if(tags.includes("TITLE")){
+                await this.title(paragraphText);
+                return true;
+            }
+        },
+        function handleSayStyleTag(context) {
+            // This handler simply modifies the sayStyle
+            const sayStyleRegexp = /say-style\s*:\s*([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/;
+            const adhocSayStyle = context.tags.find(t => sayStyleRegexp.test(t))
+            if(adhocSayStyle){
+                const [, character, sentiment] = adhocSayStyle.match(sayStyleRegexp);
+                context.sayStyle = this.getSayStyle(character, sentiment)
+            }
+        },
+        async function handlePortraitMode({paragraphText, tags, sayStyle}) {
+            const portrait = tags.find(t => t.match(/^[a-zA-Z0-9]*-[a-zA-Z0-9]*$/))
+            if(portrait){
+                const [, character, sentiment] = portrait.match(/([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/);
+                await this.sayWithPortrait(paragraphText, character, sentiment, sayStyle)
+                return true;
+            }
+        }
+    ];
+
+    async runParagraphHandlers(context) {
+        for (const h of BipsiPlayback.paragraphHandlers) {
+            if (await h.call(this, context) === true) return true;
+        }
+    }
+
     async continueStory(EVENT){
         const story = this.story;
         const AVATAR = findEventByTag(this.data, "is-player");
-        const defaultSayStyle = oneField(EVENT, "say-style", "json")?.data 
-                             || oneField(AVATAR, "say-style", "json")?.data 
+        const defaultSayStyle = oneField(EVENT, "say-style", "json")?.data
+                             || oneField(AVATAR, "say-style", "json")?.data
                              || {};
 
         while(story.canContinue) {
@@ -614,46 +696,14 @@ class BipsiPlayback extends EventTarget {
             var tags = story.currentTags;
 
             if(paragraphText.length > 0){
-                const matchSpawn = paragraphText.trim().match(/SPAWN_AT\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
-                const matchCutscene = paragraphText.trim().match(/CUTSCENE\(([^),\s]*)([\s]*,[\s]*([^)]*)*)*\)/)
-
-                if( matchSpawn ){
-                    const target = matchSpawn[1];
-                    const event = matchSpawn[3] || "is-player";
-                    await this.spawnAt(target.trim(), event.trim());
-                }else if( matchCutscene ){
-                    const target = matchCutscene[1];
-                    const field = matchCutscene[3] || "touch";
-                    let targetEvent = findEventByTag(this.data, target);
-                    if(targetEvent){
-                        const js_field = oneField(targetEvent, field, "javascript")?.data;
-                        if (js_field !== undefined) {
-                            await this.runJS(targetEvent, js_field);
-                        }
-                    }
-                }else if(tags.includes("TITLE")){
-                    await this.title(paragraphText);
-                }else{
-                    let sayStyle = defaultSayStyle;
-
-                    const adhocSayStyle = tags.find(t => t.match(/say-style\s*:\s*[a-zA-Z0-9]*-[a-zA-Z0-9]*/))
-                    if(adhocSayStyle){
-                        const matchSayStyle = adhocSayStyle.match(/say-style\s*:\s*([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/);
-                        const character = matchSayStyle[1];
-                        const sentiment = matchSayStyle[2];
-                        sayStyle = this.getSayStyle(character, sentiment)
-                    }
-                    
-                    const portrait = tags.find(t => t.match(/^[a-zA-Z0-9]*-[a-zA-Z0-9]*$/))
-                    if(portrait){
-                        const matchPortrait = portrait.match(/([a-zA-Z0-9]*)-([a-zA-Z0-9]*)/);
-                        const character = matchPortrait[1];
-                        const sentiment = matchPortrait[2];
-                        await this.sayWithPortrait(paragraphText, character, sentiment, sayStyle)
-                    }else{
-                        await this.say(paragraphText, sayStyle);
-                    }
-                    
+                const context = {
+                    paragraphText,
+                    tags,
+                    sayStyle: {... defaultSayStyle},
+                }
+                const handled = await this.runParagraphHandlers(context);
+                if (!handled) {
+                    await this.say(context.paragraphText, context.sayStyle);
                 }
             }
         }
@@ -797,13 +847,17 @@ class BipsiPlayback extends EventTarget {
         const images_above_events = images.filter((image) => image.layer >= 2 && image.layer < 3);
         const images_above_all    = images.filter((image) => image.layer >= 3);
 
+        function drawImage({ image, x, y }) {
+            TEMP_ROOM.drawImage(image[frame % image.length], x, y);
+        }
+
         fillRendering2D(this.rendering);
         // fillRendering2D(TEMP_ROOM, background);
-        images_below_all.forEach(({ image, x, y }) => TEMP_ROOM.drawImage(image[frame % image.length], x, y));
+        images_below_all.forEach(drawImage);
         drawTilemapLayer(TEMP_ROOM, tileset, tileToFrame, palette, room);
-        images_below_events.forEach(({ image, x, y }) => TEMP_ROOM.drawImage(image[frame % image.length], x, y));
+        images_below_events.forEach(drawImage);
         drawEventLayer(TEMP_ROOM, tileset, tileToFrame, palette, room.events);
-        images_above_events.forEach(({ image, x, y }) => TEMP_ROOM.drawImage(image[frame % image.length], x, y));
+        images_above_events.forEach(drawImage);
 
         // upscale tilemaps to display area
         this.rendering.drawImage(TEMP_ROOM.canvas, 0, 0, 256, 256);
@@ -820,7 +874,7 @@ class BipsiPlayback extends EventTarget {
         }
         
         fillRendering2D(TEMP_ROOM);
-        images_above_all.forEach(({ image, x, y }) => TEMP_ROOM.drawImage(image[frame % image.length], x, y));
+        images_above_all.forEach(drawImage);
         this.rendering.drawImage(TEMP_ROOM.canvas, 0, 0, 256, 256);
 
         if (this.ended) {
@@ -926,23 +980,22 @@ class BipsiPlayback extends EventTarget {
         // if not, then update avatar position
         if (!blocked && !bounded) avatar.position = [tx, ty];
 
-        // find if there's an event that should be touched. prefer an event at
-        // the cell the avatar tried to move into but settle for the cell 
-        // they're already standing on otherwise
+        // find if there are events that should be touched. prefer events at
+        // the cell the avatar tried to move into but settle for events at
+        // the cell they're already standing on otherwise
         const [fx, fy] = avatar.position;
-        const events_at_destination = getEventsAt(room.events, tx, ty, avatar);
-        const events_at_position = getEventsAt(room.events, fx, fy, avatar);
-        const events = events_at_destination.length > 0 
-                     ? events_at_destination
-                     : events_at_position
+        const events0 = getEventsAt(room.events, tx, ty, avatar);
+        const events1 = getEventsAt(room.events, fx, fy, avatar);
+        const events = events0.length ? events0 : events1;
 
-        // if there are such events, touch them all
-        await events.forEach(async event => {
+        // if there were such events, touch them
+        for (const event of events) {
             await this.touch(event);
-        }); 
+        }
 
         this.busy = false;
     }
+
 
     eventDebugInfo(event) {
         const tags = allEventTags(event).join(", ");
@@ -994,7 +1047,7 @@ class BipsiPlayback extends EventTarget {
 
         try {
             const script = new AsyncFunction("", preamble + js);
-            await script.call(defines);
+            return await script.call(defines);
         } catch (e) {
             const long = `> SCRIPT ERROR "${e}"\n---\n${js}\n---`;
             this.log(long);
@@ -1002,6 +1055,7 @@ class BipsiPlayback extends EventTarget {
             const error = `SCRIPT ERROR:\n${e}`;
             this.showError(error);
         }
+        return undefined;
     }
 
     makeScriptingDefines(event) {
@@ -1027,8 +1081,6 @@ class BipsiPlayback extends EventTarget {
     }
     
     async showImage(imageID, fileIDs, layer, x, y) {
-        console.log(imageID, fileIDs, layer, x, y)
-
         if (typeof fileIDs === "string") {
             fileIDs = [fileIDs];
         }
@@ -1038,11 +1090,18 @@ class BipsiPlayback extends EventTarget {
         } else {
             const images = fileIDs.map((fileID) => this.getFileImageElement(fileID));
             this.images.set(imageID, { image: images, layer, x, y });
+            return Promise.all(images.map(imageLoadWaiter));
         }
     }
 
     hideImage(imageID) {
         this.images.delete(imageID);
+    }
+
+    async visibleImagesLoaded() {
+        for (const { image } of this.images.values())
+            for (const frame of image)
+                await imageLoadWaiter(frame);
     }
 
     showError(text) {
@@ -1081,7 +1140,7 @@ async function standardEventTouch(playback, event) {
 function sample(playback, id, type, values) {
     let iterator = playback.variables.get(id);
 
-    if (iterator === undefined) {
+    if (!iterator?.next) {
         iterator = ITERATOR_FUNCS[type](values);
         playback.variables.set(id, iterator);
     }
@@ -1239,6 +1298,10 @@ const SCRIPTING_FUNCTIONS = {
         return getEventAtLocation(this.PLAYBACK.data, location);
     },
 
+    EVENTS_AT(location) {
+        return getEventsAtLocation(this.PLAYBACK.data, location);
+    },
+
     LOCATION_OF(event) {
         return getLocationOfEvent(this.PLAYBACK.data, event);
     },
@@ -1259,7 +1322,7 @@ const SCRIPTING_FUNCTIONS = {
     },
 
     SHOW_IMAGE(id, files, layer, x, y) {
-        this.PLAYBACK.showImage(id, files, layer, x, y);
+        return this.PLAYBACK.showImage(id, files, layer, x, y);
     },
     HIDE_IMAGE(id) {
         this.PLAYBACK.hideImage(id);
@@ -1453,5 +1516,6 @@ function addScriptingConstants(defines, playback, event) {
 
     defines.DIALOGUE = playback.dialoguePlayback.waiter;
     defines.DIALOG = defines.DIALOGUE;
+    defines.VISIBLE_IMAGES_LOADED = playback.visibleImagesLoadedWaiter;
     defines.STORY = playback.story;
 }

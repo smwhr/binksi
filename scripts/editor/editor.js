@@ -186,6 +186,42 @@ function generateColorWheel(width, height) {
     return rendering;
 }
 
+function filterJavascriptByPurposes(sourceCode, purposes) {
+    // Add the 'CODE_ALL_TYPES' block-type to the purposes so that it's included in EVERY filter.
+    purposes = purposes.concat("ALL_TYPES");
+    // Prepend "CODE_PLAYBACK" to the sourceCode so that it's the default block-type.
+    sourceCode = `//! CODE_PLAYBACK\n${sourceCode}`;
+    // Split code into blocks by "CODE_*" block-type headings.
+    const codeBlocks = sourceCode.split(/^[ \t]*\/\/![ \t]*CODE_/m);
+    // Filter out any code blocks that don't match the given purposes.
+    const purposesRegex = new RegExp(`^(?:${purposes.join("|")})(?:\n|\r\n)`);
+    const result = codeBlocks.
+    // Run the function's namesake filter
+        filter(block => block.match(purposesRegex)).
+    // Remove the start line for each code block (the remains of the "//! CODE_" line).
+        map(block => block.slice(block.indexOf('\n')+1)).
+    // Rejoin modified blocks into a whole
+        join("");
+    return result;
+}
+
+function getRunnableJavascriptForOnePlugin(event, purposes) {
+    const configFields = event.fields.filter((field) => field.key !== "plugin");
+    let configsJS;
+    if (purposes.includes("EDITOR")) {
+        configsJS = `const CONFIG = EDITOR.createEditorPluginConfig(${event.id});`;
+    } else {
+        configsJS = `const CONFIG = { fields: ${JSON.stringify(configFields)} };`;
+    }
+    let pluginJS = FIELD(event, "plugin", "javascript");
+    pluginJS = filterJavascriptByPurposes(pluginJS, purposes);
+    pluginJS = `// PLUGIN CODE"\n${pluginJS}\n`;
+    if (!pluginJS.replace(/\/\/[^\n]*\n|[\n\t ]/g, "")) {
+        return "";
+    }
+    return `(function () {\n// PLUGINS CONFIG\n${configsJS}\n${pluginJS}\n})();\n`;
+}
+
 class PaletteEditor {
     /**
      * @param {BipsiEditor} editor 
@@ -386,6 +422,7 @@ const FIELD_DEFAULTS = {
     javascript: "",
     json: "",
     text: "",
+    file: null,
 };
 
 class EventFieldEditor extends EventTarget {
@@ -430,7 +467,7 @@ class EventFieldEditor extends EventTarget {
         const { key, type } = this.getData();
         field.key = key;
         if (field.type !== type) {
-            field.data = FIELD_DEFAULTS[type];
+            field.data = COPY(FIELD_DEFAULTS[type]);
         }
         field.type = type;
     }
@@ -552,35 +589,7 @@ class EventEditor {
         ui.action("create-event-setup", () => createUniqueEvent("is-setup", EVENT_TEMPLATES.setup));
         ui.action("create-event-library", () => createUniqueEvent("is-library", EVENT_TEMPLATES.library));
         ui.action("create-event-plugin", () => this.editor.createEvent(EVENT_TEMPLATES.plugin));
-        
-        ui.action("create-event-plugin-file", async () => {
-            const [file] = await maker.pickFiles("application/javascript");
-            if (!file) return;
-
-            const js = await maker.textFromFile(file);
-            const fields = [
-                { key: "is-plugin", type: "tag", data: true },
-                { key: "plugin-order", type: "json", data: 0 },
-                { key: "plugin", type: "javascript", data: js },
-                ...fieldsFromPluginCode(js),
-            ];
-
-            this.editor.createEvent(fields);
-        });
-
-        function parseOrNull(json) {
-            try {
-                return JSON.parse(json);
-            } catch {
-                return null;
-            }
-        }
-
-        function fieldsFromPluginCode(code) {
-            const regex = /\/\/!CONFIG\s+([\w-]+)\s+\(([\w-]+)\)\s*(.*)/g;
-            const fields = Array.from(code.matchAll(regex)).map(([, key, type, json]) => ({ key, type, data: parseOrNull(json)}));
-            return fields;
-        }
+        ui.action("create-event-plugin-file", () => this.editor.createPluginEvent());
 
         this.actions = {
             add: ui.action("add-event-field", () => this.addField()),
@@ -1014,6 +1023,14 @@ class TileEditor {
     }
 }
 
+/**
+ * @param {HTMLElement} element
+ */
+function isElementTextInput(element) {
+    const tag = element.tagName.toLowerCase();
+    return tag === "textarea" || (tag === "input" && element.type === "text");
+}
+
 class BipsiEditor extends EventTarget {
     /**
      * Setup most of the stuff for the bipsi editor (the rest is in init
@@ -1250,6 +1267,13 @@ class BipsiEditor extends EventTarget {
         this.picker = ui.toggle("tile-picker");
 
         // initial selections
+        // NOTE - set radio inputs to 1, then 0.  This is for browsers (like firefox) which auto-set
+        // radio inputs to the value they held before the prior page refresh.  If we only set the
+        // radio input to 0, and the browser ALREADY set the radio to 0, then the change event isn't
+        // triggered.  This puts the ui into a bad state.
+        this.modeSelect.selectedIndex = 1;
+        this.roomPaintTool.selectedIndex = 1;
+        this.tilePaintFrameSelect.selectedIndex = 1;
         this.modeSelect.selectedIndex = 0;
         this.roomPaintTool.selectedIndex = 0; 
         this.tilePaintFrameSelect.selectedIndex = 0;
@@ -1344,14 +1368,6 @@ class BipsiEditor extends EventTarget {
         this.actions.pasteEvent.disabled = true;
         this.actions.save.disabled = !storage.available;
 
-        /**
-         * @param {HTMLElement} element 
-         */
-        function isElementTextInput(element) {
-            const tag = element.tagName.toLowerCase();
-            return tag === "textarea" || (tag === "input" && element.type === "text");
-        }
-
         // hotkeys
         document.addEventListener("keydown", (event) => {
             if (event.repeat) return;
@@ -1422,7 +1438,7 @@ class BipsiEditor extends EventTarget {
             const { data, room } = this.getSelections();
             this.paletteSelectWindow.select.selectedIndex = data.palettes.indexOf(getPaletteById(data, room.palette));
             
-            this.selectedEventId = undefined;
+            this.selectPointedEvent();
             this.requestRedraw();
             this.eventEditor.refresh();
         });
@@ -1518,6 +1534,7 @@ class BipsiEditor extends EventTarget {
 
             // events
             this.eventEditor.refresh();
+            this.refreshEditorPluginConfigs();
         });
 
         const onEventsPointer = async (event, canvas) => {
@@ -1815,6 +1832,12 @@ class BipsiEditor extends EventTarget {
         this.requestedRedraw = true;
     }
 
+    selectPointedEvent() {
+        const {x, y} = this.selectedEventCell;
+        this.selectedEventId = getEventsAt(this.getSelections().room.events, x, y)[0]?.id;
+        this.eventEditor.refresh();
+    }
+
     update(dt) {
         if (!this.ready) return;
 
@@ -2078,6 +2101,11 @@ class BipsiEditor extends EventTarget {
         if (this.tileBrowser.select.selectedIndex === -1) {
             this.tileBrowser.select.selectedIndex = 0;
         }
+
+        if (this.pendingTileSelect) {
+            this.tileBrowser.selectedTileIndex = this.pendingTileSelect;
+            delete this.pendingTileSelect;
+        }
     }
 
     /**
@@ -2130,7 +2158,8 @@ class BipsiEditor extends EventTarget {
     }
 
     async newTile() {
-        await this.stateManager.makeChange(async (data) => {
+        this.pendingTileSelect = this.tileBrowser.selectedTileIndex + 1;
+        this.stateManager.makeChange(async (data) => {
             const { tileIndex, tileset } = this.getSelections(data);
             const id = nextTileId(data);
             const frames = [findFreeFrame(data.tiles)];
@@ -2140,11 +2169,11 @@ class BipsiEditor extends EventTarget {
             const { x, y, size } = getTileCoords(tileset.canvas, frames[0]);
             tileset.clearRect(x, y, size, size);
         });        
-        this.tileBrowser.selectedTileIndex += 1;
     }
 
     async duplicateTile() {
-        await this.stateManager.makeChange(async (data) => {
+        this.pendingTileSelect = this.tileBrowser.selectedTileIndex + 1;
+        this.stateManager.makeChange(async (data) => {
             const { tileIndex, tile, tileset } = this.getSelections(data);
             const id = nextTileId(data);
             const frames = [];
@@ -2157,7 +2186,6 @@ class BipsiEditor extends EventTarget {
                 drawTile(tileset, frames[i], frame);
             });
         });
-        this.tileBrowser.selectedTileIndex += 1;
     }
 
     async toggleTileAnimated() {
@@ -2199,6 +2227,7 @@ class BipsiEditor extends EventTarget {
         const { data } = this.getSelections();
         if (data.tiles.length <= 1) return;
 
+        this.pendingTileSelect = this.tileBrowser.selectedTileIndex - 1;
         return this.stateManager.makeChange(async (data) => {
             const { tile } = this.getSelections(data);
             arrayDiscard(data.tiles, tile);
@@ -2321,6 +2350,40 @@ class BipsiEditor extends EventTarget {
         });
     }
 
+    parseOrNull(json) {
+        try {
+            return JSON.parse(json);
+        } catch {
+            return null;
+        }
+    }
+
+    fieldsFromPluginCode(code) {
+        const regex = /\/\/!CONFIG\s+([\w-]+)\s+\(([\w-]+)\)\s*(.*)/g;
+        const fields = Array.from(code.matchAll(regex)).map(([, key, type, json]) => ({ key, type, data: this.parseOrNull(json)}));
+        return fields;
+    }
+
+    async createPluginEvent() {
+        const [file] = await maker.pickFiles("application/javascript");
+        if (!file) return;
+
+        const js = await maker.textFromFile(file);
+        const fields = [
+           { key: "is-plugin", type: "tag", data: true },
+           { key: "plugin-order", type: "json", data: 0 },
+           { key: "plugin", type: "javascript", data: js },
+            ...this.fieldsFromPluginCode(js),
+        ];
+        const id = nextEventId(EDITOR.stateManager.present);
+
+        this.createEvent(fields);
+
+        // Run EDITOR code for the new plugin
+        const editorCode = getRunnableJavascriptForOnePlugin({ id, fields }, [ "EDITOR" ]);
+        new Function(editorCode)();
+    }
+
     copySelectedEvent() {
         const { data } = this.getSelections();
         const event = getEventById(data, this.selectedEventId);
@@ -2405,7 +2468,7 @@ class BipsiEditor extends EventTarget {
         this.logTextElement.replaceChildren("> RESTARTING PLAYTEST\n");
     }
 
-    gatherPluginsJavascript() {
+    gatherPluginsJavascript(purposes) {
         const { data } = this.getSelections();
 
         const event = findEventByTag(data, "is-plugins");
@@ -2418,14 +2481,9 @@ class BipsiEditor extends EventTarget {
 
         events.sort((a, b) => getPluginPriority(a) - getPluginPriority(b));
 
-        const sections = events.map((event) => {
-            const configFields = event.fields.filter((field) => field.key !== "plugin");
-            const configsJS = `const CONFIG = { fields: ${JSON.stringify(configFields)} };`;
-            const pluginsJS = `// PLUGIN CODE"\n${FIELD(event, "plugin", "javascript")}\n`;
-            return `(function () {\n// PLUGINS CONFIG\n${configsJS}\n${pluginsJS}\n})();\n`;
-        });
+        const sections = events.map((event) => getRunnableJavascriptForOnePlugin(event, purposes));
 
-        return sections.join("\n");
+        return sections.filter(Boolean).join("\n");
     }
 
     async makeExportHTML(debug=false) {
@@ -2444,7 +2502,7 @@ class BipsiEditor extends EventTarget {
         ONE("#player", clone).hidden = false;
 
         // insert plugins
-        ONE("#plugins", clone).innerHTML = this.gatherPluginsJavascript();
+        ONE("#plugins", clone).innerHTML = this.gatherPluginsJavascript(debug ? [ "PLAYBACK", "PLAYBACK_DEV" ] : [ "PLAYBACK" ]);
 
         // replace loading screen
         try {
@@ -2468,7 +2526,7 @@ class BipsiEditor extends EventTarget {
 
         ONE("#story-source", clone).innerHTML = this.inkSource;
 
-        return clone.outerHTML;
+        return `<!DOCTYPE html>${clone.outerHTML}`;
     }
         
     async exportProject() {
@@ -2515,21 +2573,24 @@ class BipsiEditor extends EventTarget {
         const text = await maker.textFromFile(file);
 
         if (file.name.endsWith(".json")) {
-            return await this.loadBundle(JSON.parse(text));
+            await this.loadBundle(JSON.parse(text));
+        } else {
+            const html = await maker.htmlFromText(text);
+            // extract the bundle from the imported page
+            const bundle = maker.bundleFromHTML(html);
+            // load the contents of the bundle into the editor
+            await this.loadBundle(bundle);
+
+            const story = maker.bundleFromHTML(html, "#story-embed");
+            await this.loadStory(story);
+
+            const inkSource = maker.storyFromHTML(html, "#story-source");
+            await this.loadInkSource(inkSource);
         }
 
-        const html = await maker.htmlFromText(text);
-        // extract the bundle from the imported page
-        const bundle = maker.bundleFromHTML(html);
-        // load the contents of the bundle into the editor
-        await this.loadBundle(bundle);
-
-        const story = maker.bundleFromHTML(html, "#story-embed");
-        await this.loadStory(story);
-
-        const inkSource = maker.storyFromHTML(html, "#story-source");
-        await this.loadInkSource(inkSource);
-
+        // Run EDITOR code for all plugins
+        const editorCode = EDITOR.gatherPluginsJavascript([ "EDITOR" ]);
+        (new Function(editorCode))();
     } 
 
     async importBundle() {
@@ -2539,7 +2600,7 @@ class BipsiEditor extends EventTarget {
         const json = await maker.textFromFile(file);
         const bundle = JSON.parse(json);
         await this.loadBundle(bundle);
-    }
+    } 
 
     async resetProject() {
         // clear SAVE_SLOT
@@ -2584,12 +2645,34 @@ class BipsiEditor extends EventTarget {
         
         const inkSource = this.inkSource;
         await storage.save(inkSource, `${SAVE_SLOT}-story`);
-
+        
         // successful save, no unsaved changes
         this.unsavedChanges = false;
 
         // allow saving again when enough time has passed to see visual feedback
         await timer;
         this.actions.save.disabled = false;
+    }
+
+    createEditorPluginConfig(id) {
+        const result = { id };
+        this.editorPluginConfigs ||= [];
+        this.editorPluginConfigs.push(result);
+        this.refreshEditorPluginConfig(result);
+        return result;
+    }
+
+    refreshEditorPluginConfig(config) {
+        const event = window.findEventById(this.stateManager.present, config.id);
+        if (event) {
+            Object.setPrototypeOf(config, event);
+        }
+    }
+
+    refreshEditorPluginConfigs() {
+        if (!this.editorPluginConfigs) return;
+        for (const config of this.editorPluginConfigs) {
+            this.refreshEditorPluginConfig(config);
+        }
     }
 }
