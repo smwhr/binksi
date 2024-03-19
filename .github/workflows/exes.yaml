@@ -16,13 +16,18 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      # Get binksi version from package.json
+      - name: get-npm-version
+        id: package-version
+        uses: martinbeentjes/npm-get-version-action@v1.3.1
+
       - name: Set game configuration
         env:
           APP_NAME: binksi
           DESCRIPTION: bipsi plus ink equals less than three
 
           # This must be of the format "N.N.N", where the N's are all numbers
-          VERSION: 0.10.0
+          VERSION: ${{ steps.package-version.outputs.current-version}}
 
           # By default, the author will be your name on GitHub. You can manually change this.
           AUTHOR: ${{ github.repository_owner }}
@@ -71,7 +76,7 @@ jobs:
         run: |
           sed -i'.bak' 's/1024/1080/g' app/src/index.js
           sed -i'.bak' 's/768/600/g' app/src/index.js
-      
+
       - name: move webapp into Electron folder
         run: |
           cp -r ./dist/* ./app/src
@@ -116,7 +121,7 @@ jobs:
           pkg.version=process.env.VERSION;\
           pkg.author=process.env.AUTHOR;\
           fs.writeFileSync('./app/package.json',JSON.stringify(pkg,undefined,'\t'));"
-          
+
       - name: Build the app
         working-directory: ./app
         env:
@@ -169,7 +174,7 @@ jobs:
       # The next two steps are identical, except for explicitly passing in the tag name in the latter
       # I wish I knew how to do this in a more elegant way.
       # See also: I'd love to abstract out the startsWith() check and generated tag name into variable
-      
+
       - name: Release on GitHub (Built via Tag)
         uses: softprops/action-gh-release@v1
         if: ${{ startsWith(github.ref, 'refs/tags/v') }}
@@ -182,8 +187,8 @@ jobs:
             app/out/**/*Setup.exe
             app/out/**/*.rpm
             app/out/**/*.zip
-            
-      
+
+
       - name: Release on GitHub (Automated Tag)
         uses: softprops/action-gh-release@v1
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
