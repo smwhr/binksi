@@ -16,10 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      # Get binksi version from package.json
-      - name: get-npm-version
+      - name: Get binksi version from package.json
         id: package-version
-        uses: martinbeentjes/npm-get-version-action@v1.3.1
+        uses: beaconbrigade/package-json-version@v0.3
 
       - name: Set game configuration
         env:
@@ -27,7 +26,7 @@ jobs:
           DESCRIPTION: bipsi plus ink equals less than three
 
           # This must be of the format "N.N.N", where the N's are all numbers
-          VERSION: ${{ steps.package-version.outputs.current-version}}
+          VERSION: ${{ steps.package-version.outputs.version }}
 
           # By default, the author will be your name on GitHub. You can manually change this.
           AUTHOR: ${{ github.repository_owner }}
