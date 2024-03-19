@@ -1,6 +1,6 @@
 {
   "name": "binksi",
-  "version": "1.0.0",
+  "version": "0.12.2",
   "main": "dist/index.js",
   "repository": "git@github.com:smwhr/bipsi.git",
   "author": "Ju / Smwhr <ju@smwhr.net>",
@@ -15,11 +15,11 @@
     "pug-cli": "^1.0.0-alpha6"
   },
   "scripts": {
-    "watch": "pug -P -w -o dist -b src src/index.pug",
+    "watch": "npm run build -- -w",
     "editor": "light-server-pug -o -s dist -w 'src/**, data/** # yarn build'",
     "ink": "inklecate -o data/story.ink.json data/story.ink && node build-scripts/cleanJson.js data/story.ink.json",
-    "build": "pug -P -o dist -b src src/index.pug",
-    "build:empty": "pug -P -o dist -b src src/index.pug && node build-scripts/makeEmptyEditor.js dist/index.html dist/index.html",
+    "build": "pug -O \"{version:'$npm_package_version'}\" -P -o dist -b src src/index.pug",
+    "build:empty": "npm run build && node build-scripts/makeEmptyEditor.js dist/index.html dist/index.html",
     "make-player": "node build-scripts/makePlayer.js dist/index.html dist/player.html",
     "dist-doc": "mkdir -p dist/docs && cp -R docs/* dist/docs && mv dist/docs/_config.yml dist/_config.yml"
   }
