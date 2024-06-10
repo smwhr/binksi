@@ -24,9 +24,16 @@ jobs:
         pathInArchive: "inklecate"
     - name: install, build ink, build website
       run: yarn && yarn ink && yarn build && yarn dist-doc
-    - name: Deploy 🚀
+    - name: Deploy to GitHub Pages 🚀
       uses: JamesIves/github-pages-deploy-action@4.1.5
       with:
         branch: online-editor # The branch the action should deploy to.
         folder: dist # The folder the action should deploy.
-    
+    - name: Deploy to Itch 🚀
+      uses: manleydev/butler-publish-itchio-action@master
+      env:
+        BUTLER_CREDENTIALS: ${{ secrets.BUTLER_CREDENTIALS }}
+        CHANNEL: html
+        ITCH_GAME: binksi
+        ITCH_USER: smwhr
+        PACKAGE: ./dist/index.html
