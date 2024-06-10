@@ -655,7 +655,8 @@ class BipsiPlayback extends EventTarget {
         },
         async function handleTitleTag({paragraphText, tags}) {
             if(tags.includes("TITLE")){
-                await this.title(paragraphText);
+                const [, background] = this.getActivePalette().colors;
+                await this.say(paragraphText, { anchorY: .5, backgroundColor: background });
                 return true;
             }
         },
