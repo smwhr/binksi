@@ -119,7 +119,7 @@ function getEventAtLocation(data, location) {
 /**
  * @param {BipsiDataProject} data
  * @param {BipsiDataLocation} location
- * @returns {BipsiDataEvents?}
+ * @returns {BipsiDataEvent[]}
  */
 function getEventsAtLocation(data, location) {
     const room = findRoomById(data, location.room);
@@ -251,9 +251,16 @@ if (backdrops.length) {
 
 let backgrounds = FIELDS_OR_LIBRARY("background");
 if (backgrounds.length > 0) {
-    SHOW_IMAGE("BACKGROUND", backgrounds, 1, 0, 0);
+    SHOW_IMAGE("BACKGROUND", backgrounds, 0, 0, 0);
 } else if (IS_TAGGED(EVENT, "clear-background")) {
     HIDE_IMAGE("BACKGROUND");
+}
+
+let midgrounds = FIELDS_OR_LIBRARY("midground");
+if (midgrounds.length > 0) {
+    SHOW_IMAGE("MIDGROUND", midgrounds, 1, 0, 0);
+} else if (IS_TAGGED(EVENT, "clear-midground")) {
+    HIDE_IMAGE("MIDGROUND");
 }
 
 let foregrounds = FIELDS_OR_LIBRARY("foreground");
@@ -435,12 +442,10 @@ class BipsiPlayback extends EventTarget {
         this.busy = false;
         this.error = false;
 
-        this.inputWait = undefined;
-        this.inputWaitResolve = undefined;
-
         this.objectURLs = new Map();
         this.imageElements = new Map();
         this.visibleImagesLoadedWaiter = { then: (resolve, reject) => this.visibleImagesLoaded().then(resolve, reject) };
+        this.proceedWaiter = { then: (resolve) => this.addEventListener("proceed", resolve, { once: true }) };
 
         this.music = document.createElement("audio");
         this.music.loop = true;
@@ -501,10 +506,6 @@ class BipsiPlayback extends EventTarget {
         this.ended = false;
         this.dialoguePlayback.clear();
         this.variables.clear();
-
-        this.inputWaitResolve?.apply();
-        this.inputWaitResolve = undefined;
-        this.inputWait = undefined;
 
         this.music.removeAttribute("src");
         this.music.pause();
@@ -828,7 +829,7 @@ class BipsiPlayback extends EventTarget {
         this.render();
     }
 
-    render(frame=undefined) {
+    addRoomToScene(scene, dest, frame) {
         // find avatar, current room, current palette
         const avatar = getEventById(this.data, this.avatarId);
         const room = roomFromEvent(this.data, avatar);
@@ -836,50 +837,67 @@ class BipsiPlayback extends EventTarget {
         const tileset = this.stateManager.resources.get(this.data.tileset);
 
         // find current animation frame for each tile
-        frame = frame ?? this.frameCount;
         const tileToFrame = makeTileToFrameMap(this.data.tiles, frame);
 
-        // sort images
-        const images = Array.from(this.images.values());
-        images.sort((a, b) => a.layer - b.layer);
-        const images_below_all    = images.filter((image) => image.layer < 1);
-        const images_below_events = images.filter((image) => image.layer >= 1 && image.layer < 2);
-        const images_above_events = images.filter((image) => image.layer >= 2 && image.layer < 3);
-        const images_above_all    = images.filter((image) => image.layer >= 3);
-
-        function drawImage({ image, x, y }) {
-            TEMP_ROOM.drawImage(image[frame % image.length], x, y);
+        function upscaler(func) {
+            return () => {
+                fillRendering2D(TEMP_ROOM);
+                func();
+                dest.drawImage(TEMP_ROOM.canvas, 0, 0, 256, 256);
+            };
         }
 
-        fillRendering2D(this.rendering);
-        // fillRendering2D(TEMP_ROOM, background);
-        images_below_all.forEach(drawImage);
-        drawTilemapLayer(TEMP_ROOM, tileset, tileToFrame, palette, room);
-        images_below_events.forEach(drawImage);
-        drawEventLayer(TEMP_ROOM, tileset, tileToFrame, palette, room.events);
-        images_above_events.forEach(drawImage);
+        scene.push({ layer: 1, func: upscaler(() => drawTilemapLayer(TEMP_ROOM, tileset, tileToFrame, palette, room)) });
+        scene.push({ layer: 2, func: upscaler(() => drawEventLayer(TEMP_ROOM, tileset, tileToFrame, palette, room.events)) });
+    }
 
-        // upscale tilemaps to display area
-        this.rendering.drawImage(TEMP_ROOM.canvas, 0, 0, 256, 256);
+    addImagesToScene(scene, dest, frame) {
+        function drawImage({ image, x, y }) {
+            dest.drawImage(image[frame % image.length], x, y);
+        }
 
-        // render dialogue box if necessary
-        if (!this.dialoguePlayback.empty) {
+        const images = [...this.images.values()];
+        const draws = images.map((image) => ({ layer: image.layer, func: () => drawImage(image) }));
+
+        scene.push(...draws);
+    }
+
+    addDialogueToScene(scene, dest, frame) {
+        if (this.dialoguePlayback.empty)
+            return;
+
             // change default dialogue position based on avatar position
+        const avatar = getEventById(this.data, this.avatarId);
             const top = avatar.position[1] >= 8;
             this.dialoguePlayback.options.anchorY = top ? 0 : 1;
 
             // redraw dialogue and copy to display area
             this.dialoguePlayback.render();
-            this.rendering.drawImage(this.dialoguePlayback.dialogueRendering.canvas, 0, 0);
+        scene.push({ layer: 3, func: () => dest.drawImage(this.dialoguePlayback.dialogueRendering.canvas, 0, 0) });
         }
         
-        fillRendering2D(TEMP_ROOM);
-        images_above_all.forEach(drawImage);
-        this.rendering.drawImage(TEMP_ROOM.canvas, 0, 0, 256, 256);
-
-        if (this.ended) {
-            fillRendering2D(this.rendering);
+    addLayersToScene(scene, dest, frame) {
+        if (!this.ended) {
+            this.addRoomToScene(scene, dest, frame);
+            this.addDialogueToScene(scene, dest, frame);
+            this.addImagesToScene(scene, dest, frame);
         }
+    }
+
+    render(frame=undefined) {
+        frame = frame ?? this.frameCount;
+
+        const scene = [];
+        
+        // add visual layers to scene
+        this.addLayersToScene(scene, this.rendering, frame);
+
+        // sort visual layers
+        scene.sort((a, b) => a.layer - b.layer);
+
+        // clear and draw layers
+            fillRendering2D(this.rendering);
+        scene.forEach(({ func }) => func());
 
         // signal, to anyone listening, that rendering happened
         this.dispatchEvent(new CustomEvent("render"));
@@ -917,16 +935,7 @@ class BipsiPlayback extends EventTarget {
         return this.ready
             && this.dialoguePlayback.empty
             && !this.busy
-            && !this.ended
-            && !this.inputWait;
-    }
-
-    async waitInput() {
-        this.inputWait = this.inputWait ?? new Promise((resolve) => {
-            this.inputWaitResolve = resolve;
-        });
-
-        return this.inputWait;
+            && !this.ended;
     }
 
     async proceed() {
@@ -936,22 +945,13 @@ class BipsiPlayback extends EventTarget {
             this.restart();
         }
 
-        this.inputWaitResolve?.apply();
-        this.inputWaitResolve = undefined;
-        this.inputWait = undefined;
-
+        this.dispatchEvent(new CustomEvent("proceed"));        
         this.dialoguePlayback.skip();
 
         if (this.autoplay) {
             this.music.play();
             this.autoplay = false;
         }
-    }
-
-    async title(script, options={}) {
-        const [, background] = this.getActivePalette().colors;
-        options = { anchorY: .5, backgroundColor: background, ...options };
-        return this.say(script, options);
     }
 
     async say(script, options={}) {
@@ -1040,7 +1040,7 @@ class BipsiPlayback extends EventTarget {
         }
     }
 
-    async runJS(event, js, debug=false) {
+    async runJS(event, js) {
         const defines = this.makeScriptingDefines(event);
         const names = Object.keys(defines).join(", ");
         const preamble = `const { ${names} } = this;\n`;
@@ -1287,7 +1287,9 @@ const SCRIPTING_FUNCTIONS = {
     },
 
     TITLE(dialogue, options) {
-        return this.PLAYBACK.title(dialogue, options);
+        const [, background] = this.PALETTE.colors;
+        options = { anchorY: .5, backgroundColor: background, ...options };
+        return this.PLAYBACK.say(dialogue, options);
     },
 
     TOUCH(event) {
@@ -1349,11 +1351,9 @@ const SCRIPTING_FUNCTIONS = {
         let files = FIELDS(event, field, "file");
         let names = FIELDS(event, field, "text");
 
-        if(files.length > 0) return files;
-
-        if (names && this.LIBRARY) {
-            files = names.map((name) => FIELD(this.LIBRARY, name, "file"))
-        } else if (this.LIBRARY) {
+        if (files.length === 0 && names.length > 0 && this.LIBRARY) {
+            files = names.map((name) => FIELD(this.LIBRARY, name, "file"));
+        } else if (files.length === 0 && this.LIBRARY) {
             files = FIELDS(this.LIBRARY, field, "file");
         }
         return files;
@@ -1483,12 +1483,7 @@ const SCRIPTING_FUNCTIONS = {
     },
     POST(message, origin="*") {
         postMessageParent(message, origin);
-    },
-
-    async WAIT_INPUT() {
-        return this.PLAYBACK.waitInput();
-    },
-
+    }, 
     //binksi
     SET_INK_VAR(field, value) {
         this.STORY.variablesState.$(field, value);
@@ -1516,6 +1511,10 @@ function addScriptingConstants(defines, playback, event) {
 
     defines.DIALOGUE = playback.dialoguePlayback.waiter;
     defines.DIALOG = defines.DIALOGUE;
+    defines.INPUT = playback.proceedWaiter;
     defines.VISIBLE_IMAGES_LOADED = playback.visibleImagesLoadedWaiter;
     defines.STORY = playback.story;
+
+    // don't use these. retained for backwards compatibility
+    defines.WAIT_INPUT = () => defines.INPUT;
 }

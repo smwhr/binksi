@@ -72,15 +72,16 @@ function generateGrid(width, height, gap) {
     return rendering;
 }
 
-const TILE_ZOOM = 20;
-const ROOM_ZOOM = 2;
+// change these at your own risk
+let TILE_ZOOM = 20;
+let ROOM_ZOOM = 2;
 
 const TILE_GRID = generateGrid(TILE_ZOOM * TILE_PX, TILE_ZOOM * TILE_PX, TILE_ZOOM);
 const ROOM_GRID = generateGrid(ROOM_PX * ROOM_ZOOM, ROOM_PX * ROOM_ZOOM, TILE_PX * ROOM_ZOOM);
 
-const TILE_SELECT_ZOOM = 5;
+let TILE_SELECT_ZOOM = 5;
 
-const TILE_ICON_SCALE = Math.max(1, Math.floor(TILE_PX / 8));
+let TILE_ICON_SCALE = Math.max(1, Math.floor(TILE_PX / 8));
 
 /** 
  * Update the given bipsi project data so that it's valid for this current
@@ -425,6 +426,52 @@ const FIELD_DEFAULTS = {
     file: null,
 };
 
+const EVENT_FIELD_PRESETS = [
+    { name: "before", type: "javascript", tooltip: "run javascript before touch" },
+    { name: "after", type: "javascript", tooltip: "run javascript after touch" },
+    { name: "touch", type: "javascript", tooltip: "run javascript instead of touch" },
+    { name: "add-behavior", type: "javascript", tooltip: "add a new type of behavior" },
+    { name: "solid", type: "tag", tooltip: "this event blocks movement" },
+    { name: "one-time", type: "tag", tooltip: "this event removes itself after touch" },
+    { name: "page-color", type: "text", tooltip: "change web page background to html color" },
+    { name: "exit", type: "location", tooltip: "move avatar somewhere" },
+    { name: "set-avatar", type: "tile", tooltip: "change avatar graphic" },
+    { name: "graphic", type: "tile", tooltip: "tile to display for this event" },
+    { name: "colors", type: "colors", tooltip: "color of this event's graphic" },
+    { name: "touch-location", type: "location", tooltip: "touch another event" },
+    { name: "title", type: "dialogue", tooltip: "show a title style dialogue" },
+    { name: "ending", type: "dialogue", tooltip: "show a title style dialogue and end" },
+    { name: "say", type: "dialogue", tooltip: "show a dialogue" },
+    { name: "say-style", type: "json", tooltip: "change how dialogues look for this event" },
+    { name: "say-mode", type: "text", tooltip: "advanced dialogue, see docs" },
+    { name: "say-shared-id", type: "text", tooltip: "advanced dialogue, see docs" },
+    { name: "no-says", type: "javascript", tooltip: "advanced dialogue, see docs" },
+    { name: "music", type: "file", tooltip: "play named music from library" },
+    { name: "stop-music", type: "tag", tooltip: "stop playing music" },
+    
+    { name: "background", type: "file", tooltip: "show named image on background layer" },
+    { name: "foreground", type: "file", tooltip: "show named image on foreground layer" },
+    { name: "overlay", type: "file", tooltip: "show named image on overlay layer" },
+    { name: "clear-background", type: "tag", tooltip: "remove image on background layer" },
+    { name: "clear-foreground", type: "tag", tooltip: "remove image on foreground layer" },
+    { name: "clear-overlay", type: "tag", tooltip: "remove image on overlay layer" },
+    
+    { name: "is-player", type: "tag", tooltip: "this event is the avatar" },
+    { name: "is-setup", type: "tag", tooltip: "(one only) this event run on start" },
+    { name: "is-library", type: "tag", tooltip: "(one only) this event contains named files" }, 
+    { name: "is-plugin", type: "tag", tooltip: "mark this event as a plugin" },
+    { name: "plugin-order", type: "text", tooltip: "number for determining the order to run plugins at startup" },
+    { name: "plugin", type: "javascript", tooltip: "code to run when this plugin loads" },
+];
+
+/** @type {Map<string, typeof EVENT_FIELD_PRESETS[number]>} */
+const eventPresetLookup = new Map();
+EVENT_FIELD_PRESETS.forEach((preset) => eventPresetLookup.set(preset.name, preset));
+
+window.addEventListener("DOMContentLoaded", () => {
+    ONE("#field-names").replaceChildren(...EVENT_FIELD_PRESETS.map((preset) => html("option", { value: preset.name })));
+});
+
 class EventFieldEditor extends EventTarget {
     /**
      * @param {EventEditor} eventEditor 
@@ -441,6 +488,11 @@ class EventFieldEditor extends EventTarget {
 
         this.nameInput.onchange = () => this.changed();
         this.typeSelect.onchange = () => this.changed();
+
+        this.nameInput.addEventListener("change", () => this.usePresetType());
+        this.nameInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") this.usePresetType();
+        });
     }
 
     changed() {
@@ -461,6 +513,7 @@ class EventFieldEditor extends EventTarget {
     pushData(field) {
         this.nameInput.value = field.key;
         this.typeSelect.value = field.type;
+        this.checkPreset();
     }
 
     pullData(field) {
@@ -470,6 +523,24 @@ class EventFieldEditor extends EventTarget {
             field.data = COPY(FIELD_DEFAULTS[type]);
         }
         field.type = type;
+    }
+
+    checkPreset() {
+        const preset = eventPresetLookup.get(this.nameInput.value);
+        if (preset) {
+            this.fieldElement.title = preset.tooltip;
+        }
+
+        this.fieldElement.classList.toggle("preset", preset !== undefined);
+    }
+
+    usePresetType() {
+        const preset = eventPresetLookup.get(this.nameInput.value);
+        if (preset && this.typeSelect.value !== preset.type) {
+            this.typeSelect.value = preset.type;
+            this.changed();
+        }
+        this.checkPreset();
     }
 }
 
@@ -501,7 +572,7 @@ const EVENT_TEMPLATES = {
         { key: "page-color", type: "text", data: "black" },
     ],
     code: [
-        { key: "touch", type: "javascript", data: "await DO_STANDARD();" },
+        { key: "after", type: "javascript", data: `await SAY("testing!");` },
     ],
     setup: [
         { key: "is-setup", type: "tag", data: true },
@@ -874,7 +945,7 @@ class EventEditor {
     async addField() {
         this.editor.stateManager.makeChange(async (data) => {
             const { event } = this.getSelections(data);
-            event.fields.push({ key: "new field", type: "text", data: "" });
+            event.fields.push({ key: "", type: "text", data: "" });
             this.setSelectedIndex(event.fields.length - 1);
         });
     }
@@ -995,13 +1066,26 @@ class TileEditor {
 
     redraw() {
         const { tileset, tile, bg, fg } = this.editor.getSelections();
-        if (!tile) return;
 
-        this.editor.tileEditor.animateToggle.setCheckedSilent(tile.frames.length > 1);
-        this.editor.actions.swapTileFrames.disabled = tile.frames.length === 1;
-        this.editor.renderings.tilePaint1.canvas.style.opacity = tile.frames.length === 1 ? "0%" : null;
+        if (tile === undefined) {
+            this.editor.tilePaintContainer.setAttribute("disabled", "");
+        } else {
+            this.editor.tilePaintContainer.removeAttribute("disabled");
+        }
+
+        this.animateToggle.disabled = tile === undefined;
+
+        this.editor.tileEditor.animateToggle.setCheckedSilent(tile && tile.frames.length > 1);
+        this.editor.actions.swapTileFrames.disabled = !tile || tile?.frames.length === 1;
+        this.editor.renderings.tilePaint1.canvas.style.opacity = tile?.frames.length === 1 ? "0%" : null;
 
         const tilesetC = recolorMask(tileset, fg);
+
+        if (!tile) {
+            fillRendering2D(this.editor.renderings.tilePaint0);
+            fillRendering2D(this.editor.renderings.tilePaint1);
+            return;
+        }
 
         [this.editor.renderings.tilePaint0, this.editor.renderings.tilePaint1].forEach((rendering, i) => {
             fillRendering2D(rendering, bg === "#000000" ? undefined : bg);
@@ -1221,6 +1305,7 @@ class BipsiEditor extends EventTarget {
         timer();
 
         // find all the ui already defined in the html
+        this.tilePaintContainer = ONE("#tile-paint-row");
         this.tilePaintFrameSelect = ui.radio("tile-paint-frame");
         this.modeSelect = ui.radio("mode-select");
         this.roomPaintTool = ui.radio("room-paint-tool");
@@ -1251,8 +1336,9 @@ class BipsiEditor extends EventTarget {
         
         this.roomPaintTool.tab(ONE("#color-select-window-toggle"), "tile");
 
-        this.roomPaintTool.tab(ONE("#draw-room-tile-controls"), "tile", "high", "pick");
-        this.roomPaintTool.tab(ONE("#picker-toggle"), "tile", "high", "pick");
+        this.roomPaintTool.tab(ONE("#draw-room-tile-controls"), "tile");
+        this.roomPaintTool.tab(ONE("#picker-toggle"), "tile");
+        this.roomPaintTool.tab(ONE("#placement-toggles"), "tile")
 
         this.modeSelect.tab(ONE("#write-ink-tab-controls"), "write-ink");
         this.modeSelect.tab(ONE("#ink-tab-view"), "write-ink");
@@ -1264,7 +1350,10 @@ class BipsiEditor extends EventTarget {
         this.tileGrid.addEventListener("change", () => this.requestRedraw());
 
         this.highlight = ui.toggle("highlight");
+        this.placeTile = ui.toggle("place-tile");
         this.picker = ui.toggle("tile-picker");
+
+        this.placeTile.checked = true;
 
         // initial selections
         // NOTE - set radio inputs to 1, then 0.  This is for browsers (like firefox) which auto-set
@@ -1476,8 +1565,6 @@ class BipsiEditor extends EventTarget {
 
             const cursors = {
                 "tile": "crosshair",
-                "high": "crosshair",
-                "pick": "crosshair",
                 "wall": "crosshair",
                 "events": "pointer",
                 "shift": "move"
@@ -1486,18 +1573,6 @@ class BipsiEditor extends EventTarget {
             this.renderings.tileMapPaint.canvas.style.cursor = cursors[this.roomPaintTool.value];
         });
 
-        const setSelectedTile = (index) => {
-            this.tilePaintFrameSelect.selectedIndex = 0;
-
-            this.tileBrowser.select.setSelectedIndexSilent(index);
-            this.tileEditor.redraw();
-        }
-
-        const setSelectedColors = (bgIndex, fgIndex) => {
-            this.bgIndex.selectedIndex = bgIndex;
-            this.fgIndex.selectedIndex = fgIndex;
-        }
-
         this.tileBrowser.select.addEventListener("change", () => {
             if (this.roomPaintTool.selectedIndex > 1) {
                 this.roomPaintTool.selectedIndex = 0;
@@ -1505,7 +1580,7 @@ class BipsiEditor extends EventTarget {
 
             this.tilePaintFrameSelect.selectedIndex = 0;
 
-            setSelectedTile(this.tileBrowser.select.selectedIndex);
+            this.setSelectedTile(this.tileBrowser.select.selectedIndex);
         })
 
         // whenever the project data is changed
@@ -1537,184 +1612,7 @@ class BipsiEditor extends EventTarget {
             this.refreshEditorPluginConfigs();
         });
 
-        const onEventsPointer = async (event, canvas) => {
-            // hack bc race condition rn
-            const drag = ui.drag(event);
-            await sleep(1);
-
-            if (this.eventEditor.showDialoguePreview) {
-                this.dialoguePreviewPlayer.skip();
-                if (this.dialoguePreviewPlayer.empty) this.eventEditor.resetDialoguePreview();
-                this.requestRedraw();
-                return;
-            }
-
-            const { room } = this.getSelections();
-
-            const round = makeCanvasRounder(this.renderings.tileMapPaint.canvas, ROOM_SIZE);
-
-            const redraw = () => {
-                this.requestRedraw();
-            };
-
-            const positions = trackCanvasStroke(canvas, drag);
-            let started = false;
-
-            const { x, y } = round(positions[0]);
-
-            if (event.altKey) {
-                this.tileBrowser.selectedTileIndex = room.tilemap[y][x];
-                return;
-            }
-
-            this.selectedEventCell = { x, y };
-            redraw();
-
-            const events_ = getEventsAt(room.events, x, y);
-            const event_ = events_[events_.length - 1];
-            this.selectedEventId = event_?.id;
-            
-            this.eventEditor.refresh();
-
-            drag.addEventListener("move", (event) => {
-                const { x: x0, y: y0 } = round(positions[positions.length - 2]);
-                const { x: x1, y: y1 } = round(positions[positions.length - 1]);
-                const dx = x1 - x0;
-                const dy = y1 - y0;
-
-                const move = (dx !== 0 || dy !== 0);
-
-                if (!started && move) {
-                    started = true;
-                    this.stateManager.makeCheckpoint();
-                }
-
-                const x = Math.max(0, Math.min(x1, ROOM_SIZE - 1));
-                const y = Math.max(0, Math.min(y1, ROOM_SIZE - 1));
-                const existing = getEventsAt(room.events, x, y)[0];
-
-                if (event_ && !existing) {
-                    event_.position = [x, y];
-                    this.selectedEventCell = { x, y };
-
-                    if (move) {
-                        this.selectedEventId = getEventsAt(room.events, x, y)[0]?.id;
-                        this.stateManager.changed();
-                    }
-                }
-            });
-        };
-
-        const onRoomPointer = async (event, canvas, forcePick=false) => {
-            if (this.roomPaintTool.value === "events" && !forcePick) {
-                onEventsPointer(event, canvas);
-                return;
-            }
-
-            const { tile, room, data, bgIndex, fgIndex, colorIndex } = this.getSelections();
-
-            const factor = ROOM_SIZE / canvas.width;
-
-            const round = (position) => {
-                return {
-                    x: Math.floor(position.x * factor),
-                    y: Math.floor(position.y * factor),
-                };
-            };
-
-            const redraw = () => this.requestRedraw();
-
-            const drag = ui.drag(event);
-            const positions = trackCanvasStroke(canvas, drag);
-
-            const { x, y } = round(positions[0]);
-
-            const tool = this.roomPaintTool.value;
-
-            const prevTile = room.tilemap[y][x];
-
-            const same = room.tilemap[y][x] === tile.id 
-                      && room.backmap[y][x] === bgIndex
-                      && room.foremap[y][x] === fgIndex;
-
-            const nextTile = same ? 0 : tile.id;
-            const nextWall = 1 - room.wallmap[y][x];
-
-            if (tool === "pick" || forcePick || this.picker.checked) {
-                if (prevTile !== 0) {
-                    const index = Math.max(0, data.tiles.findIndex((tile) => tile.id === prevTile));
-
-                    setSelectedTile(index);
-                    setSelectedColors(room.backmap[y][x], room.foremap[y][x]);
-                }
-            } else if (tool === "wall" || tool === "tile" || tool === "high" || tool === "color") {    
-                this.stateManager.makeCheckpoint();
-
-                const setIfWithin = (map, x, y, value) => {
-                    if (x >= 0 && x < ROOM_SIZE && y >= 0 && y < ROOM_SIZE) map[y][x] = value ?? 0;
-                } 
-
-                const plots = {
-                    tile: (x, y) => { 
-                        setIfWithin(room.tilemap, x, y, nextTile); 
-                        if (this.paintBackground.checked) setIfWithin(room.backmap, x, y, bgIndex); 
-                        if (this.paintForeground.checked) setIfWithin(room.foremap, x, y, fgIndex); 
-                    },
-                    wall: (x, y) => setIfWithin(room.wallmap, x, y, nextWall),
-                    color: (x, y) => setIfWithin(this.roomColorMode.value === "bg" ? room.backmap : room.foremap, x, y, colorIndex+1),
-                }
-
-                const plot = plots[tool];
-                plot(x, y);
-                redraw();
-
-                drag.addEventListener("move", (event) => {
-                    const { x: x0, y: y0 } = round(positions[positions.length - 2]);
-                    const { x: x1, y: y1 } = round(positions[positions.length - 1]);
-                    lineplot(x0, y0, x1, y1, plot);
-                    redraw();
-                });
-
-                drag.addEventListener("up", (event) => {
-                    const { x, y } = round(positions[positions.length - 1]);
-                    plot(x, y);
-                    redraw();
-                    this.stateManager.changed();
-                });
-
-                if (tool === "wall") {
-                    drag.addEventListener("click", (event) => {
-                        if (event.detail.shiftKey) {
-                            room.tilemap.forEach((row, y) => {
-                                row.forEach((tileIndex, x) => {
-                                    if (tileIndex === prevTile) {
-                                        room.wallmap[y][x] = nextWall;
-                                    }
-                                });
-                            });
-                        }
-                        redraw();
-                    });
-                }
-            } else if (tool === "shift") {    
-                this.stateManager.makeCheckpoint();
-
-                drag.addEventListener("move", (event) => {
-                    const { x: x0, y: y0 } = round(positions[positions.length - 2]);
-                    const { x: x1, y: y1 } = round(positions[positions.length - 1]);
-                    const dx = x0 - x1;
-                    const dy = y0 - y1;
-                    cycleMap(room.tilemap, dx, dy);
-                    cycleMap(room.wallmap, dx, dy);
-                    cycleMap(room.backmap, dx, dy);
-                    cycleMap(room.foremap, dx, dy);
-                    cycleEvents(room.events, -dx, -dy);
-                    redraw();
-                });
-            } 
-        };
-
-        this.renderings.tileMapPaint.canvas.addEventListener("pointerdown", (event) => onRoomPointer(event, this.renderings.tileMapPaint.canvas));
+        this.renderings.tileMapPaint.canvas.addEventListener("pointerdown", (event) => this.onRoomPointer(event, this.renderings.tileMapPaint.canvas));
 
         this.frame = 0;
 
@@ -1808,6 +1706,196 @@ class BipsiEditor extends EventTarget {
         return instance;
     }
 
+    setSelectedTile(index) {
+        this.tilePaintFrameSelect.selectedIndex = 0;
+        this.tileBrowser.select.setSelectedIndexSilent(index);
+        this.tileEditor.redraw();
+    }
+
+    async onEventsPointer(event, canvas) {
+        // hack bc race condition rn
+        const drag = ui.drag(event);
+        await sleep(1);
+
+        if (this.eventEditor.showDialoguePreview) {
+            this.dialoguePreviewPlayer.skip();
+            if (this.dialoguePreviewPlayer.empty) this.eventEditor.resetDialoguePreview();
+            this.requestRedraw();
+            return;
+        }
+
+        const { room } = this.getSelections();
+
+        const round = makeCanvasRounder(this.renderings.tileMapPaint.canvas, ROOM_SIZE);
+
+        const positions = trackCanvasStroke(canvas, drag);
+        let started = false;
+
+        const { x, y } = round(positions[0]);
+
+        if (event.altKey) {
+            this.tileBrowser.selectedTileIndex = room.tilemap[y][x];
+            return;
+        }
+
+        this.selectedEventCell = { x, y };
+        this.requestRedraw();
+
+        const events_ = getEventsAt(room.events, x, y);
+        const event_ = events_[events_.length - 1];
+        this.selectedEventId = event_?.id;
+
+        this.eventEditor.refresh();
+
+        drag.addEventListener("move", () => {
+            const { x: x0, y: y0 } = round(positions[positions.length - 2]);
+            const { x: x1, y: y1 } = round(positions[positions.length - 1]);
+            const dx = x1 - x0;
+            const dy = y1 - y0;
+
+            const move = (dx !== 0 || dy !== 0);
+
+            if (!started && move) {
+                started = true;
+                this.stateManager.makeCheckpoint();
+            }
+
+            const x = Math.max(0, Math.min(x1, ROOM_SIZE - 1));
+            const y = Math.max(0, Math.min(y1, ROOM_SIZE - 1));
+            const existing = getEventsAt(room.events, x, y)[0];
+
+            if (event_ && !existing) {
+                event_.position = [x, y];
+                this.selectedEventCell = { x, y };
+
+                if (move) {
+                    this.selectedEventId = getEventsAt(room.events, x, y)[0]?.id;
+                    this.requestRedraw();
+                }
+            }
+        });
+        drag.addEventListener("up", () => this.stateManager.changed());
+    }
+
+    async onRoomPointer(event, canvas, forcePick=false) {
+        if (this.roomPaintTool.value === "events" && !forcePick) {
+            return this.onEventsPointer(event, canvas);
+        }
+
+        const { tile, room, data, bgIndex, fgIndex, colorIndex } = this.getSelections();
+
+        const factor = ROOM_SIZE / canvas.width;
+
+        const round = (position) => {
+            return {
+                x: Math.floor(position.x * factor),
+                y: Math.floor(position.y * factor),
+            };
+        };
+
+        const drag = ui.drag(event);
+        const positions = trackCanvasStroke(canvas, drag);
+
+        const { x, y } = round(positions[0]);
+
+        const tool = this.roomPaintTool.value;
+
+        const prevTile = room.tilemap[y][x];
+
+        const active = {
+            tile: this.placeTile.checked,
+            fore: this.paintForeground.checked,
+            back: this.paintBackground.checked,
+        }
+
+        const picking = forcePick || this.picker.checked;
+        const drawing = tool === "wall" || tool === "tile" || tool === "color";
+        const shifting = tool === "shift";
+
+        const same = tile
+                  && (room.tilemap[y][x] === tile.id || !active.tile)
+                  && (room.backmap[y][x] === bgIndex || !active.back)
+                  && (room.foremap[y][x] === fgIndex || !active.fore);
+
+        const nextTile = same ? 0 : tile?.id;
+        const nextWall = 1 - room.wallmap[y][x];
+
+        if (picking) {
+            if (prevTile !== 0) {
+                const index = Math.max(0, data.tiles.findIndex((tile) => tile.id === prevTile));
+
+                if (active.tile) this.setSelectedTile(index);
+                if (active.fore) this.fgIndex.selectedIndex = room.foremap[y][x];
+                if (active.back) this.bgIndex.selectedIndex = room.backmap[y][x];
+            }
+        } else if (drawing) {    
+            this.stateManager.makeCheckpoint();
+
+            const setIfWithin = (map, x, y, value) => {
+                if (x >= 0 && x < ROOM_SIZE && y >= 0 && y < ROOM_SIZE) map[y][x] = value ?? 0;
+            } 
+
+            const plots = {
+                tile: (x, y) => { 
+                    if (this.placeTile.checked) setIfWithin(room.tilemap, x, y, nextTile); 
+                    if (this.paintBackground.checked) setIfWithin(room.backmap, x, y, bgIndex); 
+                    if (this.paintForeground.checked) setIfWithin(room.foremap, x, y, fgIndex); 
+                },
+                wall: (x, y) => setIfWithin(room.wallmap, x, y, nextWall),
+                color: (x, y) => setIfWithin(this.roomColorMode.value === "bg" ? room.backmap : room.foremap, x, y, colorIndex+1),
+            }
+
+            const plot = plots[tool];
+            plot(x, y);
+            this.requestRedraw();
+
+            drag.addEventListener("move", () => {
+                const { x: x0, y: y0 } = round(positions[positions.length - 2]);
+                const { x: x1, y: y1 } = round(positions[positions.length - 1]);
+                lineplot(x0, y0, x1, y1, plot);
+                this.requestRedraw();
+            });
+
+            drag.addEventListener("up", () => {
+                const { x, y } = round(positions[positions.length - 1]);
+                plot(x, y);
+                this.requestRedraw();
+                this.stateManager.changed();
+            });
+
+            if (tool === "wall") {
+                drag.addEventListener("click", (event) => {
+                    if (event.detail.shiftKey) {
+                        room.tilemap.forEach((row, y) => {
+                            row.forEach((tileIndex, x) => {
+                                if (tileIndex === prevTile) {
+                                    room.wallmap[y][x] = nextWall;
+                                }
+                            });
+                        });
+                    }
+                    this.requestRedraw();
+                });
+            }
+        } else if (shifting) {    
+            this.stateManager.makeCheckpoint();
+
+            drag.addEventListener("move", () => {
+                const { x: x0, y: y0 } = round(positions[positions.length - 2]);
+                const { x: x1, y: y1 } = round(positions[positions.length - 1]);
+                const dx = x0 - x1;
+                const dy = y0 - y1;
+                cycleMap(room.tilemap, dx, dy);
+                cycleMap(room.wallmap, dx, dy);
+                cycleMap(room.backmap, dx, dy);
+                cycleMap(room.foremap, dx, dy);
+                cycleEvents(room.events, -dx, -dy);
+                this.requestRedraw();
+            });
+            drag.addEventListener("up", () => this.stateManager.changed());
+        }
+    }
+
     /**
      * @param {CanvasRenderingContext2D} rendering 
      * @param {number} roomIndex 
@@ -1863,6 +1951,7 @@ class BipsiEditor extends EventTarget {
         this.tileEditor.redraw();
 
         const { data, room, roomIndex, tileset, fgIndex, bgIndex } = this.getSelections();
+
         const palette = this.roomPaintTool.value === "color" 
                       ? this.paletteEditor.getPreviewPalette()  
                       : getPaletteById(data, room.palette);
@@ -1966,7 +2055,7 @@ class BipsiEditor extends EventTarget {
 
         const fg = fgIndex === 0 ? "transparent" : palette.colors[fgIndex];
         const bg = bgIndex === 0 ? "transparent" : palette.colors[bgIndex];
-        this.colorSelectPreview.style.background = `linear-gradient(135deg, ${fg} 0%, ${fg} 50%, ${bg} 50%, ${bg} 100%)`
+        this.colorSelectPreview.style.background = `radial-gradient(${fg} 0%, ${fg} 50%, ${bg} 50%, ${bg} 100%)`
 
         this.redrawDialoguePreview();
     } 
@@ -2096,11 +2185,6 @@ class BipsiEditor extends EventTarget {
 
             prev.map(URL.revokeObjectURL);
         });
-
-
-        if (this.tileBrowser.select.selectedIndex === -1) {
-            this.tileBrowser.select.selectedIndex = 0;
-        }
 
         if (this.pendingTileSelect) {
             this.tileBrowser.selectedTileIndex = this.pendingTileSelect;
@@ -2285,6 +2369,13 @@ class BipsiEditor extends EventTarget {
         return this.stateManager.makeChange(async (data) => {
             const { room } = this.getSelections(data);
             arrayDiscard(data.rooms, room);
+ 
+            // replace location references to this room
+            const fallback = data.rooms[0].id;
+            allEvents(data)
+                .flatMap((event) => event.fields)
+                .filter((field) => field.type === "location" && field.data.room === room.id)
+                .forEach((field) => field.data.room = fallback);
         });
     }
 
@@ -2365,7 +2456,7 @@ class BipsiEditor extends EventTarget {
     }
 
     async createPluginEvent() {
-        const [file] = await maker.pickFiles("application/javascript");
+        const [file] = await maker.pickFiles(".js,.txt");
         if (!file) return;
 
         const js = await maker.textFromFile(file);
