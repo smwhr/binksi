@@ -59,6 +59,15 @@ button:disabled {
     cursor: not-allowed;
 }
 
+[disabled] {
+    opacity: .5;
+    cursor: not-allowed !important;
+}
+
+[disabled] * {
+    pointer-events: none;
+}
+
 .radio-select label {
     position: relative;
 
@@ -74,7 +83,7 @@ button:disabled {
     background-color: var(--button-color);
 }
 
-.radio-select label > input[type="radio"] {
+.radio-select label > input {
     margin: 0;
     appearance: none;
     -moz-appearance: none;
@@ -308,7 +317,7 @@ select {
     max-width: 72px;
 }
 
-#highlight-toggle, #picker-toggle {
+#highlight-toggle, #picker-toggle, #place-tile-toggle {
     flex: 0;
     min-width: 64px;
 }
@@ -368,7 +377,6 @@ label.toggle {
     flex-direction: row;
     white-space: nowrap;
     border: none;
-    border-radius: 1em;
     font-weight: bold;
     display: flex;
     justify-content: center;
@@ -377,6 +385,10 @@ label.toggle {
 
     color: black;
     position: relative;
+}
+
+:not(.horizontal-capsule) > label.toggle {
+    border-radius: 1em;
 }
 
 input + *, input + * + * {
@@ -803,6 +815,10 @@ label.toggle#tile-grid {
     background: inherit;
     padding-top: 0;
     padding-bottom: 0;
+}
+
+.event-line.preset > input {
+    color: var(--button-color);
 }
 
 .event-line:not(.active) > * {

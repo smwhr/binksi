@@ -103,11 +103,11 @@ class DialoguePlayback extends EventTarget {
      * @returns {Promise}
      */
     async queue(script, options={}) {
-        const { font, lines } = this.getOptions(options);
+        const { font, lines, lineGap } = this.getOptions(options);
         const lineWidth = options.lineWidth ||192;
 
         script = parseFakedown(script);
-        const glyphPages = scriptToPages(script, { font, lineWidth, lineCount: lines });
+        const glyphPages = scriptToPages(script, { font, lineWidth, lineCount: lines, lineGap });
         const pages = glyphPages.map((glyphs) => ({ glyphs, options }));
         this.queuedPages.push(...pages);
         
@@ -151,7 +151,8 @@ class DialoguePlayback extends EventTarget {
                      + (options.font.lineHeight + options.lineGap) * options.lines;
         const width = (options.lineWidth || 192) + 16;
 
-        fillRendering2D(this.dialogueRendering, options.backgroundColor);
+        fillRendering2D(this.dialogueRendering);
+        fillRendering2D(this.dialogueRendering, options.backgroundColor || "transparent");
         
         const { width: displayWidth, height: displayHeight } = this.dialogueRendering.canvas;
         const spaceX = displayWidth - width;

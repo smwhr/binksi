@@ -5,15 +5,18 @@
 
 #info-tab-body.controls-tab-body(hidden)
     h2= `binksi -- ${version} (${date})`
+    h3 about
     p binksi is a bitsy-like tool for making small lo-fi graphical adventure games where a character explores a world and interacts with its inhabitants.
     p propulse your <a href="https://kool.tools/bipsi/user-guide.pdf">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a>.
     p many thanks and kudos to <a href="https://kool.tools/">candle</a> creator of bipsi ! Support its development on <a href="https://www.patreon.com/kooltools">candle's patreon</a>.
-
     h3 guides
     .info-action-list
-        a.button(href="https://kool.tools/bipsi/user-guide.pdf" target="_blank" title="open user guide")
+        a.button(href="https://kool.tools/bipsi/user-guide.pdf" target="_blank" title="open user guide") 
             include /icons/info.svg
             | bipsi user guide
+        a.button(href="https://github.com/Ragzouken/bipsi/blob/main/README.md" target="_blank" title="open readme") 
+            include /icons/code.svg
+            | bipsi advanced readme
         a.button(href="https://github.com/inkle/ink/blob/master/Documentation/WritingWithInk.md" target="_blank" title="writing with Ink")
             include /icons/ink.svg
             | writing with Ink

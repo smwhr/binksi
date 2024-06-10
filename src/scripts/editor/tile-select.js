@@ -54,7 +54,7 @@ class TileBrowser {
         return this.select.valueAsNumber;
     }
 
-    set selectedTileIndex(value) { 
+    set selectedTileIndex(value) {
         this.select.setValueSilent(value);
         //this.select.inputs[this.select.selectedIndex]?.scrollIntoView({ block: "nearest" });
     }
@@ -66,18 +66,20 @@ class TileBrowser {
     }
 
     redraw() {
-        const { data, tile } = this.editor.getSelections();
-        if (!tile) return;
-
-        this.items.setCount(data.tiles.length);
-        if (this.select.selectedIndex === -1) {
-            this.select.selectedIndex = 0;
+        if (this.selectedTileIndex === -1) {
+            this.selectedTileIndex = 0;
         }
 
-        this.editor.tileEditor.animateToggle.setCheckedSilent(tile.frames.length > 1);
+        const { data, tile } = this.editor.getSelections();
 
-        this.editor.actions.reorderTileBefore.disabled = this.selectedTileIndex <= 0;
-        this.editor.actions.reorderTileAfter.disabled = this.selectedTileIndex >= data.tiles.length - 1;
+        this.items.setCount(data.tiles.length);
+
+        this.editor.tileEditor.animateToggle.setCheckedSilent(tile?.frames.length > 1);
+
+        this.editor.actions.duplicateTile.disabled = !tile;
+        this.editor.actions.reorderTileBefore.disabled = !tile || this.selectedTileIndex <= 0;
+        this.editor.actions.reorderTileAfter.disabled = !tile || this.selectedTileIndex >= data.tiles.length - 1;
+        this.editor.actions.deleteTile.disabled = this.selectedTileIndex === -1 || data.tiles.length === 1;
     }
 
     async setURIs(uris, canvases) {
