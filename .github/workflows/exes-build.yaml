@@ -1,9 +1,6 @@
 name: Build the executables, deploy on GitHub Tag Release & Itch
 
-on:
-  push:
-    tags:
-      - "v*.*.*"
+on: workflow_dispatch
 
 defaults:
   run:
@@ -142,7 +139,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-           files: |
+          tag_name: v${{ steps.package-version.outputs.version }}
+          files: |
             app/out/**/*.deb
             app/out/**/*.dmg
             app/out/**/*Setup.exe
