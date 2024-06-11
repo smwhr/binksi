@@ -1,8 +1,9 @@
-name: "build"
+name: Build the web version, deploy on GitHub Pages & Itch
+
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*.*.*"
 
 jobs:
   build-binksi:
