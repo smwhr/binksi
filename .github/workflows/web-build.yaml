@@ -2,8 +2,8 @@ name: Build the web version, deploy on GitHub Pages & Itch
 
 on:
   push:
-    tags:
-      - "v*.*.*"
+    branches:
+      - main
 
 jobs:
   build-binksi:
