@@ -14,11 +14,9 @@ jobs:
         os: [macos-latest, windows-latest]
         include:
           - os: macos-latest
-            itch_channel: osx
-            itch_package: app/out/**/*.zip
+            itch_channel_files: osx app/out/**/*.zip
           - os: windows-latest
-            itch_channel: windows
-            itch_package: app/out/**/*Setup.exe
+            itch_channel_files: windows app/out/**/*Setup.exe
 
     steps:
       - uses: actions/checkout@v2
@@ -139,7 +137,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ steps.package-version.outputs.version }}
+          tag_name: ${{ steps.package-version.outputs.version }}
           files: |
             app/out/**/*.deb
             app/out/**/*.dmg
@@ -148,10 +146,10 @@ jobs:
             app/out/**/*.zip
 
       - name: Deploy to Itch 🚀
-        uses: manleydev/butler-publish-itchio-action@master
-        env:
-          BUTLER_CREDENTIALS: ${{ secrets.BUTLER_CREDENTIALS }}
-          CHANNEL: ${{ matrix.itch_channel }}
-          ITCH_GAME: binksi
-          ITCH_USER: smwhr
-          PACKAGE: ${{ matrix.itch_package }}
+        uses: Ayowel/butler-to-itch@v1
+        with:
+          butler_key: ${{ secrets.BUTLER_CREDENTIALS }}
+          itch_user: smwhr
+          itch_game: binksi
+          version: ${{ steps.package-version.outputs.version }}
+          files: ${{ matrix.itch_channel_files }}
