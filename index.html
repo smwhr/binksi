@@ -3576,9 +3576,19 @@ class BipsiPlayback extends EventTarget {
         scene.push({ layer: 2, func: upscaler(() => drawEventLayer(TEMP_ROOM, tileset, tileToFrame, palette, room.events)) });
     }
 
+    /**
+     * 
+     * @param {*} scene 
+     * @param {CanvasRenderingContext2D} dest 
+     * @param {number} frame 
+     */
     addImagesToScene(scene, dest, frame) {
+        // 2x scale for images for non-hd
+        const scale = BIPSI_HD ? 1 : 2;
+
         function drawImage({ image, x, y }) {
-            dest.drawImage(image[frame % image.length], x, y);
+            const source = image[frame % image.length]
+            dest.drawImage(source, x, y, source.width * scale, source.height * scale);
         }
 
         const images = [...this.images.values()];
@@ -10650,7 +10660,7 @@ p {
           </div>
         </div>
         <div class="controls-tab-body" id="info-tab-body" hidden="hidden">
-          <h2>binksi -- 0.13.2 (2024/06/12)</h2>
+          <h2>binksi -- 0.14.0 (2024/07/02)</h2>
           <h3>about</h3>
           <p>binksi is a bitsy-like tool for making small lo-fi graphical adventure games where a character explores a world and interacts with its inhabitants.</p>
           <p>propulse your <a href="https://github.com/Ragzouken/bipsi/blob/main/README.md">bipsi</a> games with narration engine <a href="https://www.inklestudios.com/ink/">ink</a>.</p>
